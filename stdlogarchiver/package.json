@@ -1,0 +1,21 @@
+{
+  "name": "tool_stdlogarchiver",
+  "version": "1.0.0",
+  "description": "",
+  "main": "",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "testall": "cd ../../../ && php ./vendor/bin/phpunit --testsuite tool_stdlogarchiver_testsuite --testdox-html admin/tool/stdlogarchiver/tests/tests.html",
+    "testapi": "cd ../../../ && php ./vendor/bin/phpunit --testsuite tool_stdlogarchiver_testsuite --group api --testdox-html admin/tool/stdlogarchiver/tests/tests.html",
+    "testcurrent": "cd ../../../ && php ./vendor/bin/phpunit --testsuite tool_stdlogarchiver_testsuite --group current --testdox-html admin/tool/stdlogarchiver/tests/currents.html",
+    "test": "cd ../../../ && php ./vendor/bin/phpunit --testsuite tool_stdlogarchiver_testsuite --exclude skip --testdox-html admin/tool/stdlogarchiver/tests/tests.html",
+    "initphpunit": "cd ../../../ && php admin/tool/phpunit/cli/init.php",
+    "amd" : "cd amd && grunt amd --force",
+    "upgrade" : "cd ../../../admin/cli/ && php upgrade.php --non-interactive"
+  },
+  "author": "",
+  "license": "",
+  "devDependencies": {}
+}

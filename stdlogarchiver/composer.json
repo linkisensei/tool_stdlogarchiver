@@ -1,0 +1,16 @@
+{
+    "name": "tool/stdlogarchiver",
+    "type": "project",
+    "config" : {
+        "vendor-dir": "libs/"
+    },
+    "require": {
+        "aws/aws-sdk-php": "^3.299"
+    },
+    "authors": [
+        {
+            "name": "Lucas Barreto",
+            "email": "lucas.b.fisica@gmail.com"
+        }
+    ]
+}
