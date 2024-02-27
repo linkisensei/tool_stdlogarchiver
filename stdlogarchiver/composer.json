@@ -12,5 +12,13 @@
             "name": "Lucas Barreto",
             "email": "lucas.b.fisica@gmail.com"
         }
-    ]
+    ],
+    "scripts": {
+        "pre-autoload-dump": "Aws\\Script\\Composer\\Composer::removeUnusedServices"
+    },
+    "extra": {
+        "aws/aws-sdk-php": [
+            "S3"
+        ]
+    }
 }
