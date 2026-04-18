@@ -1,13 +1,13 @@
 <?php return array(
     'root' => array(
         'name' => 'tool/stdlogarchiver',
-        'pretty_version' => 'dev-master',
-        'version' => 'dev-master',
-        'reference' => 'ba68c937acac8573db9da118875fc41b364f0701',
+        'pretty_version' => '2.x-dev',
+        'version' => '2.9999999.9999999.9999999-dev',
+        'reference' => '58c51088aa7a3544ce3d45aa3722c0b7a5e5c305',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
-        'dev' => true,
+        'dev' => false,
     ),
     'versions' => array(
         'aws/aws-crt-php' => array(
@@ -20,9 +20,9 @@
             'dev_requirement' => false,
         ),
         'aws/aws-sdk-php' => array(
-            'pretty_version' => '3.299.1',
-            'version' => '3.299.1.0',
-            'reference' => 'a0f87b8e8bfb9afd0ffd702fcda556b465eee457',
+            'pretty_version' => '3.337.3',
+            'version' => '3.337.3.0',
+            'reference' => '06dfc8f76423b49aaa181debd25bbdc724c346d6',
             'type' => 'library',
             'install_path' => __DIR__ . '/../aws/aws-sdk-php',
             'aliases' => array(),
@@ -137,9 +137,9 @@
             'dev_requirement' => false,
         ),
         'tool/stdlogarchiver' => array(
-            'pretty_version' => 'dev-master',
-            'version' => 'dev-master',
-            'reference' => 'ba68c937acac8573db9da118875fc41b364f0701',
+            'pretty_version' => '2.x-dev',
+            'version' => '2.9999999.9999999.9999999-dev',
+            'reference' => '58c51088aa7a3544ce3d45aa3722c0b7a5e5c305',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

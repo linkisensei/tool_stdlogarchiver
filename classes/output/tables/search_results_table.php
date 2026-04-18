@@ -10,6 +10,7 @@ use \moodle_url;
 use \confirm_action;
 use \tool_stdlogarchiver\util\standard_logstore;
 use \tool_stdlogarchiver\output\renderables\search_results;
+use \tool_stdlogarchiver\util\datetime_helper;
 
 class search_results_table extends flexible_table {
 
@@ -33,9 +34,9 @@ class search_results_table extends flexible_table {
      * Displays the table with the given set of templates
      * @param search_results $templates
      */
-    public function display(search_results $search_results) {
+    public function display(search_results $search_results): void {
         global $OUTPUT;
-        if (empty($search_results)) {
+        if (iterator_to_array($search_results->getIterator()) === []) {
             echo $OUTPUT->box(get_string('table:no_search_results', 'tool_stdlogarchiver'), 'generalbox boxaligncenter');
             return;
         }
@@ -46,7 +47,11 @@ class search_results_table extends flexible_table {
             $data = [];
             
             foreach ($this->ordered_columns as $index => $column) {
-                $data[] = isset($result->$column) ? $result->$column : '';
+                if ($column === 'timecreated' && isset($result->$column) && $result->$column !== '') {
+                    $data[] = datetime_helper::format((int) $result->$column);
+                } else {
+                    $data[] = isset($result->$column) ? $result->$column : '';
+                }
             }
 
             $this->add_data($data);

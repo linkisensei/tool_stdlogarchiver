@@ -1,32 +1,20 @@
 <?php namespace tool_stdlogarchiver\models;
 
 use \moodle_url;
-use \coding_exception;
 use \core\persistent;
-use \stored_file;
-use \context_system;
-use \invalid_parameter_exception;
-use \tool_stdlogarchiver\backup\readers\reader_interface;
 use \tool_stdlogarchiver\config;
-use \tool_stdlogarchiver\util\persistent_soft_delete_trait;
-
 use \tool_stdlogarchiver\util\standard_logstore;
+use \tool_stdlogarchiver\util\compression_helper;
+use \tool_stdlogarchiver\backup\readers\reader_interface;
 use \tool_stdlogarchiver\task\restore_backup_task;
-use \tool_stdlogarchiver\models\external\external_backup;
+use \tool_stdlogarchiver\task\unrestore_backup_task;
 
-class backup extends persistent{
-
-    use persistent_soft_delete_trait;
+class backup extends persistent {
 
     const TABLE = 'tool_stdlogarchiver_backups';
 
-    /**
-     * Return the definition of the properties of this model.
-     *
-     * @return array
-     */
     protected static function define_properties(): array {
-        return array(
+        return [
             'firstid' => [
                 'type' => PARAM_INT,
             ],
@@ -40,291 +28,256 @@ class backup extends persistent{
                 'type' => PARAM_INT,
             ],
             'fileformat' => [
-                'type' => PARAM_RAW,
-                'null' => NULL_ALLOWED,
-                'default' => null
+                'type'    => PARAM_ALPHANUMEXT,
+                'null'    => NULL_ALLOWED,
+                'default' => null,
             ],
-            'pathnamehash' => [
-                'type' => PARAM_RAW,
-                'null' => NULL_ALLOWED,
-                'default' => null
+            'local_path' => [
+                'type'    => PARAM_RAW,
+                'null'    => NULL_ALLOWED,
+                'default' => null,
+            ],
+            'external_service' => [
+                'type'    => PARAM_ALPHANUMEXT,
+                'null'    => NULL_ALLOWED,
+                'default' => null,
+            ],
+            'external_uri' => [
+                'type'    => PARAM_RAW,
+                'null'    => NULL_ALLOWED,
+                'default' => null,
+            ],
+            'external_customdata' => [
+                'type'    => PARAM_RAW,
+                'null'    => NULL_ALLOWED,
+                'default' => null,
             ],
             'restored' => [
-                'type' => PARAM_BOOL,
-                'default' => false
+                'type'    => PARAM_BOOL,
+                'default' => false,
             ],
-            'deleted' => [
-                'type' => PARAM_BOOL,
-                'default' => false
+            'deleted_at' => [
+                'type'    => PARAM_INT,
+                'default' => 0,
             ],
-        );
+        ];
     }
 
-    public function is_deleted() : bool {
-        return (bool) $this->get('deleted');
+    // -------------------------------------------------------------------------
+    // Status checks
+    // -------------------------------------------------------------------------
+
+    public function is_deleted(): bool {
+        return (int) $this->get('deleted_at') > 0;
     }
 
-    /**
-     * If the backup was restored to the
-     * standard logstore
-     *
-     * @return boolean
-     */
-    public function was_restored() : bool {
+    public function was_restored(): bool {
         return (bool) $this->get('restored');
     }
 
-    /**
-     * If there is already an adhoc task enqueued
-     *
-     * @return boolean
-     */
-    public function is_restoring() : bool {
-        if($this->was_restored()){
+    public function is_restoring(): bool {
+        if ($this->was_restored()) {
             return false;
         }
-
         return restore_backup_task::is_enqueued($this->get('id'));
     }
 
+    public function is_searchable(): bool {
+        return $this->get('fileformat') === config::BACKUP_FORMAT_DB;
+    }
+
+    public function has_external(): bool {
+        return !empty($this->get('external_service'));
+    }
+
+    // -------------------------------------------------------------------------
+    // File location
+    // -------------------------------------------------------------------------
+
+    public function get_filename(): string {
+        return sprintf('%d_%d.%s',
+            $this->get('starttime'),
+            $this->get('endtime'),
+            $this->get('fileformat')
+        );
+    }
+
+    public function get_local_file_path(): ?string {
+        $rel = $this->get('local_path');
+        if (empty($rel)) {
+            return null;
+        }
+        return rtrim(config::get_backup_dir(), '/') . '/' . $rel;
+    }
+
+    public function local_file_exists(): bool {
+        $path = $this->get_local_file_path();
+        return $path !== null && file_exists($path);
+    }
+
     /**
-     * Create an adhoc task to restore this backup
-     *
-     * @return void
+     * Cache path derived from the external URI (strips .gz extension).
+     * Only applicable to SQLite backups stored externally as .db.gz.
      */
-    public function create_restore_task() : bool {
-        if(!$this->get_file()){
+    public function get_cache_path(): ?string {
+        $uri = $this->get('external_uri');
+        if (empty($uri)) {
+            return null;
+        }
+        $filename = basename($uri);                      // e.g. 1704067200_1704153599.db.gz
+        $local_name = preg_replace('/\.gz$/', '', $filename); // e.g. 1704067200_1704153599.db
+        return config::get_cache_dir() . '/' . $local_name;
+    }
+
+    public function is_cached(): bool {
+        $path = $this->get_cache_path();
+        if ($path === null || !file_exists($path)) {
+            return false;
+        }
+        return (time() - filemtime($path)) < config::get_cache_ttl();
+    }
+
+    /**
+     * Returns a queryable local path for this backup.
+     * Tries: local file → cache file.
+     * Throws if neither is available (caller should use async download).
+     */
+    public function get_path_for_query(): string {
+        if ($this->local_file_exists()) {
+            return $this->get_local_file_path();
+        }
+
+        $cache_path = $this->get_cache_path();
+        if ($cache_path !== null && file_exists($cache_path)) {
+            if ($this->is_cached()) {
+                touch($cache_path); // Renew TTL.
+                return $cache_path;
+            }
+            // Cache expired — delete and fall through.
+            @unlink($cache_path);
+        }
+
+        throw new \moodle_exception('backupfilenotavailable', 'tool_stdlogarchiver');
+    }
+
+    public function decode_external_customdata(): array {
+        $raw = $this->get('external_customdata');
+        if (empty($raw)) {
+            return [];
+        }
+        return (array) json_decode($raw, true);
+    }
+
+    public function encode_external_customdata(array $data): void {
+        $this->set('external_customdata', json_encode($data));
+    }
+
+    // -------------------------------------------------------------------------
+    // File operations
+    // -------------------------------------------------------------------------
+
+    public function delete_local_file(): void {
+        $path = $this->get_local_file_path();
+        if ($path && file_exists($path)) {
+            @unlink($path);
+        }
+        $this->set('local_path', null);
+    }
+
+    public function soft_delete(): void {
+        if ($this->is_deleted()) {
+            return;
+        }
+        $this->set('deleted_at', time());
+        $this->save();
+    }
+
+    // -------------------------------------------------------------------------
+    // Reader / restore
+    // -------------------------------------------------------------------------
+
+    public function get_reader(): reader_interface {
+        $format       = $this->get('fileformat');
+        $reader_class = config::get_reader_class($format);
+        return $reader_class::create($this->get_path_for_query());
+    }
+
+    public function create_restore_task(): bool {
+        if (!$this->local_file_exists() && !$this->has_external()) {
             return false;
         }
         restore_backup_task::create_and_enqueue($this->get('id'));
         return true;
     }
 
-
-    /**
-     * Returns the issued certificates file
-     *
-     * @return stored_file|null
-     */
-    public function get_file() : ?stored_file {
-        $fs = get_file_storage();
-        $pathname_hash = $this->raw_get('pathnamehash');
-        return $fs->get_file_by_hash($pathname_hash) ?: null;
-    }
-
-
-    /**
-     * Deletes the local file if exists
-     *
-     * @return bool
-     */
-    public function delete_file() : bool {
-        if($file = $this->get_file()){
-            $file->delete();
-            $this->raw_set('pathnamehash', null);
-            $this->raw_set('fileformat', null);
-            $this->save();
+    public function create_unrestore_task(): bool {
+        if (!$this->was_restored()) {
+            return false;
         }
+        unrestore_backup_task::create_and_enqueue($this->get('id'));
         return true;
     }
 
-    /**
-     * Returns the real path of the local
-     * backup file
-     *
-     * @return string|null
-     */
-    public function get_file_local_path() : ?string {
-        if($file = $this->get_file()){
-            $storage = get_file_storage();
-            $fs = $storage->get_file_system();
-            return $fs->get_local_path_from_storedfile($file);
-        }
-
-        return null;
-    }
-
-
-    public static function create_from($data, ?stored_file $file = null) : backup {
-        if(!is_array($data) && !is_object($data)){
-            throw new invalid_parameter_exception('$data must be an array or object');
-        }
-
-        $instance = new static(0, (object) $data);
-
-        if($file){
-            $instance->set_stored_file($file);
-        }
-        
-        return $instance;
-    }
-
-    public function set_stored_file(stored_file $file){
-        $this->set('pathnamehash', $file->get_pathnamehash());
-        if(preg_match('/\.([^.]+)$/', $file->get_filename(), $matches)){
-            $this->set('fileformat', mb_strtolower($matches[1]));
-        }
-    }
-
-    /**
-     * Returns an instance of the appropriate
-     * file reader
-     *
-     * @return reader_interface
-     */
-    public function get_reader() : reader_interface {
-        $format = $this->raw_get('fileformat');
-        $reader_class = config::get_reader_class($format);
-        return $reader_class::create($this->get_file());
-    }
-
-    /**
-     * Restores the backup to the standard logstore
-     *
-     * @return boolean
-     */
-    public function restore() : bool {
+    public function restore(): bool {
         $restorer = new \tool_stdlogarchiver\restore\backup_restorer($this);
         $restorer->execute();
-        $this->raw_set('restored', true);
+        $this->set('restored', true);
         $this->save();
         return true;
     }
 
-    /**
-     * Deletes previously restored records
-     * from the standard logstore
-     *
-     * @return boolean
-     */
-    public function undo_restore() : bool {
+    public function undo_restore(): bool {
         global $DB;
 
-        if(!$this->get('pathnamehash') || !$this->get('restored')){
+        if (!$this->was_restored()) {
             return false;
         }
 
-        try {
-            $DB->delete_records_select(
-                static::TABLE,
-                "id BETWEEN :firstid AND :lastid",
-                (array) $this->to_record()
-            );
+        $logstore_table = standard_logstore::instance()->get_logstore_table();
+        $DB->delete_records_select(
+            $logstore_table,
+            'id BETWEEN :firstid AND :lastid',
+            ['firstid' => $this->get('firstid'), 'lastid' => $this->get('lastid')]
+        );
 
-            $this->raw_set('restored', false);
-            $this->save();
-            return true;
-        } catch (\Throwable $th) {
-            return false;
-        }
+        $this->set('restored', false);
+        $this->save();
+        return true;
     }
 
+    // -------------------------------------------------------------------------
+    // Download
+    // -------------------------------------------------------------------------
 
-    /**
-     * Returns the instance of the last backup record
-     *
-     * @return static|null
-     */
-    public static function get_last_backup() : ?static {
-        if($records = self::get_records([], 'id', 'DESC', 0, 1)){
-            return array_pop($records);
-        }
-        return null;
+    public function get_download_url(): moodle_url {
+        return new moodle_url('/admin/tool/stdlogarchiver/download.php', [
+            'id'      => $this->get('id'),
+            'sesskey' => sesskey(),
+        ]);
     }
 
-    /**
-     * Returns the instance of the first backup record
-     *
-     * @return static|null
-     */
-    public static function get_first_backup() : ?static {
-        if($records = self::get_records([], 'id', 'ASC', 0, 1)){
-            return array_pop($records);
-        }
-        return null;
+    // -------------------------------------------------------------------------
+    // Static helpers
+    // -------------------------------------------------------------------------
+
+    public static function get_last_backup(): ?static {
+        $records = self::get_records([], 'id', 'DESC', 0, 1);
+        return $records ? array_pop($records) : null;
     }
 
-
-    protected function before_soft_delete() {
-        $this->delete_file();
+    public static function get_first_backup(): ?static {
+        $records = self::get_records([], 'id', 'ASC', 0, 1);
+        return $records ? array_pop($records) : null;
     }
 
-    /**
-     * Returns an array containing a basic record
-     * for a stored_file related to this backup.
-     *
-     * @param string $filename
-     * @return array
-     */
-    public static function generate_backup_file_record_data(string $filename) : array {
-        return [
-            'component' => 'tool_stdlogarchiver',
-            'filearea' => config::BACKUPS_FILEAREA,
-            'contextid' => (context_system::instance())->id,
-            'itemid' => time(),
-            'filename' => $filename,
-            'filepath' => '/',
-        ];
+    public function get_hash_id(): string {
+        return substr(md5((string) $this->get('id')), 0, 8);
     }
 
-    /**
-     * Returns the instance of the external backup,
-     * if exists.
-     *
-     * @return external_backup|null
-     */
-    public function get_external_backup() : ?external_backup {
-        return external_backup::get_record(['backupid' => $this->get('id')]) ?: null;
-    }
-
-
-    public function get_file_moodle_url(?stored_file $file = null) : ?moodle_url {
-        if(!$file){
-            return null;
-        }
-
-        $url = moodle_url::make_pluginfile_url(
-            $file->get_contextid(),
-            $file->get_component(),
-            $file->get_filearea(),
-            $file->get_itemid(),
-            $file->get_filepath(),
-            $file->get_filename(),
-            false
-        ) ?: null;
-
-        return $url;
-    }
-
-    public function get_download_url() : ?moodle_url {
-        return $this->get_file_moodle_url($this->get_file());
-    }
-
-    /**
-     * Short hash of a backup id
-     *
-     * @param integer $id
-     * @return string
-     */
-    public static function hash_id(int $id) : string {
-        return substr(md5($id, true), 0, 12);
-    }
-
-    /**
-     * Short hash of the ID with
-     * no cryptographic purposes,
-     * just for display
-     *
-     * @return string
-     */
-    public function get_hash_id() : string {
-        return self::hash_id((int)$this->get('id'));
-    }
-
-    public function __toString() : string {
-        $id = $this->get('id');
-        $firstid = $this->get('firstid') ?: '?';
-        $lastid = $this->get('lastid') ?: '?';
-        return "Backup #$id ($firstid:$lastid)";
+    public function __toString(): string {
+        $id    = $this->get('id');
+        $start = $this->get('starttime');
+        $end   = $this->get('endtime');
+        return "Backup #$id ({$start}–{$end})";
     }
 }

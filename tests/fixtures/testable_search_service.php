@@ -1,21 +1,19 @@
 <?php namespace tool_stdlogarchiver\backup\search;
 
-use \coding_exception;
-use \moodle_exception;
 use \tool_stdlogarchiver\models\backup;
-use \tool_stdlogarchiver\backup\search\search_service;
 
-class testable_search_service extends search_service{
+/**
+ * Subclass of search_service that exposes protected helpers for unit testing.
+ * All search filtering is now handled by SQLite queries, so this class mainly
+ * exists to call protected methods directly in tests.
+ */
+class testable_search_service extends search_service {
 
-    public function get_backups_on_interval(int $starttime, int $endtime, int $page = 0) : array {
-        return parent::get_backups_on_interval($starttime, $endtime, $page);
+    public function get_sqlite_backups(int $starttime, int $endtime): array {
+        return parent::get_sqlite_backups($starttime, $endtime);
     }
 
-    public function get_filtered_logs_from_backup(backup $backup, array $filters) : array {
-        return parent::get_filtered_logs_from_backup($backup, $filters);
-    }
-
-    public function make_filter_function(array $filters) : callable {
-        return parent::make_filter_function($filters);
+    public function count_csv_backups(int $starttime, int $endtime): int {
+        return parent::count_csv_backups($starttime, $endtime);
     }
 }

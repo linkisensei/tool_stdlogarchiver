@@ -1,13 +1,14 @@
 <?php namespace tool_stdlogarchiver\backup\readers;
 
-use \stored_file;
 use \Generator;
 
-interface reader_interface{
-    
-    public static function create(stored_file $file) : reader_interface;
+interface reader_interface {
 
-    public function get_contents() : array;
+    public static function create(string $filepath): reader_interface;
 
-    public function get_contents_generator() : Generator;
+    /** @return object[] */
+    public function get_contents(): array;
+
+    /** @return Generator<object> */
+    public function get_contents_generator(): Generator;
 }

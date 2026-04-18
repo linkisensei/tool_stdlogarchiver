@@ -9,151 +9,113 @@ use \pix_icon;
 use \flexible_table;
 use \moodle_url;
 use \confirm_action;
-use \tool_stdlogarchiver\util\standard_logstore;
+use \tool_stdlogarchiver\util\datetime_helper;
 
 class backups_table extends flexible_table {
 
-    protected $ordered_columns = [];
-
-    public function __construct($uniqueid, $baseurl) {
+    public function __construct(string $uniqueid, moodle_url $baseurl) {
         parent::__construct($uniqueid);
 
-        $this->ordered_columns = [
-            'id',
-            'starttime',
-            'endtime',
-            'fileformat',
-            'timecreated',
-            'external_backup',
-            'restored',
-            'restoring',
-            'deleted',
-            'actions'
+        $columns = [
+            'id', 'starttime', 'endtime', 'fileformat', 'timecreated',
+            'searchable', 'external', 'restored', 'restoring', 'deleted_at', 'actions',
         ];
 
-        $headers = [];
-        foreach ($this->ordered_columns as $column) {
-            $headers[] = get_string("table:$column", 'tool_stdlogarchiver');
-        }
+        $headers = array_map(
+            fn($col) => get_string('table:' . $col, 'tool_stdlogarchiver'),
+            $columns
+        );
 
-        $this->define_columns($this->ordered_columns);
+        $this->define_columns($columns);
         $this->define_headers($headers);
         $this->define_baseurl($baseurl);
-
         $this->sortable(false);
     }
 
-    /**
-     * Displays the table with the given set of templates
-     * @param array $templates
-     */
-    public function display($backups) {
+    public function display(iterable $backups): void {
         global $OUTPUT;
+
+        if ($backups instanceof \Traversable) {
+            $backups = iterator_to_array($backups);
+        }
+
         if (empty($backups)) {
             echo $OUTPUT->box(get_string('table:no_backups', 'tool_stdlogarchiver'), 'generalbox boxaligncenter');
             return;
         }
 
         $this->setup();
-        
-        $str_delete_local = get_string('action:delete_local_backup', 'tool_stdlogarchiver');
-        $str_restore_local = get_string('action:restore_local_backup', 'tool_stdlogarchiver');
-        $str_download_local = get_string('action:download_local_backup', 'tool_stdlogarchiver');
-        $str_unrestore_local = get_string('action:unrestore_local_backup', 'tool_stdlogarchiver');
 
-        $confirm_delete_action = new confirm_action(get_string('confirm:delete_local_backup', 'tool_stdlogarchiver'));
-        $confirm_restore_action = new confirm_action(get_string('confirm:restore_local_backup', 'tool_stdlogarchiver'));
-        $confirm_unrestore_action = new confirm_action(get_string('confirm:unrestore_local_backup', 'tool_stdlogarchiver'));
+        $str_delete    = get_string('action:delete_local_backup', 'tool_stdlogarchiver');
+        $str_restore   = get_string('action:restore_local_backup', 'tool_stdlogarchiver');
+        $str_download  = get_string('action:download_local_backup', 'tool_stdlogarchiver');
+        $str_unrestore = get_string('action:unrestore_local_backup', 'tool_stdlogarchiver');
+
+        $confirm_delete    = new confirm_action(get_string('confirm:delete_local_backup', 'tool_stdlogarchiver'));
+        $confirm_restore   = new confirm_action(get_string('confirm:restore_local_backup', 'tool_stdlogarchiver'));
+        $confirm_unrestore = new confirm_action(get_string('confirm:unrestore_local_backup', 'tool_stdlogarchiver'));
 
         foreach ($backups as $backup) {
-            $external_backup = $backup->get_external_backup();
-            $restored = $backup->was_restored();
-            $restoring = $backup->is_restoring();
-            $deleted = (bool) $backup->get('deleted');
+            $is_deleted   = $backup->is_deleted();
+            $is_restored  = $backup->was_restored();
+            $is_restoring = $backup->is_restoring();
+            $has_external = $backup->has_external();
 
-            $data = [
+            $row = [
                 $backup->get('id'),
-                userdate($backup->get('starttime')),
-                userdate($backup->get('endtime')),
-                $backup->get('fileformat'),
-                userdate($backup->get('timecreated')),
-                $external_backup ? $external_backup->get('service') : get_string('no'),
-                $restored ? get_string('yes') : get_string('no'),
-                $restoring ? get_string('yes') : get_string('no'),
-                $deleted ? get_string('yes') : get_string('no'),
+                datetime_helper::format((int) $backup->get('starttime')),
+                datetime_helper::format((int) $backup->get('endtime')),
+                strtoupper($backup->get('fileformat') ?? ''),
+                datetime_helper::format((int) $backup->get('timecreated')),
+                $backup->is_searchable() ? get_string('yes') : get_string('no'),
+                $has_external ? $backup->get('external_service') : get_string('no'),
+                $is_restored  ? get_string('yes') : get_string('no'),
+                $is_restoring ? get_string('yes') : get_string('no'),
+                $is_deleted   ? datetime_helper::format((int) $backup->get('deleted_at')) : get_string('no'),
             ];
 
-            // Adding actions
             $actions = [];
 
-            if(!$deleted){
+            if (!$is_deleted && ($backup->local_file_exists() || $backup->is_cached())) {
                 $actions[] = $OUTPUT->action_icon(
                     $backup->get_download_url(),
-                    new pix_icon('i/export', $str_download_local),
+                    new pix_icon('i/export', $str_download),
                     null,
-                    [
-                        'title' => $str_download_local,
-                    ]
+                    ['title' => $str_download]
                 );
             }
 
-            if(!$restored && !$restoring){
+            if (!$is_deleted && !$is_restored && !$is_restoring) {
                 $actions[] = $OUTPUT->action_icon(
-                    new moodle_url(
-                        $this->baseurl,
-                        [
-                            'backupid' => $backup->get('id'),
-                            'action' => 'restore',
-                            'sesskey' => sesskey()
-                        ]
-                    ),
-                    new pix_icon('a/refresh', $str_restore_local),
-                    $confirm_restore_action,
-                    [
-                        'title' => $str_restore_local,
-                    ]
+                    new moodle_url($this->baseurl, ['backupid' => $backup->get('id'), 'action' => 'restore', 'sesskey' => sesskey()]),
+                    new pix_icon('a/refresh', $str_restore),
+                    $confirm_restore,
+                    ['title' => $str_restore]
                 );
             }
 
-            if($restored){
+            if ($is_restored) {
                 $actions[] = $OUTPUT->action_icon(
-                    new moodle_url(
-                        $this->baseurl,
-                        [
-                            'backupid' => $backup->get('id'),
-                            'action' => 'unrestore',
-                            'sesskey' => sesskey()
-                        ]
-                    ),
-                    new pix_icon('t/dockclose', $str_unrestore_local),
-                    $confirm_unrestore_action,
-                    [
-                        'title' => $str_unrestore_local,
-                    ]
+                    new moodle_url($this->baseurl, ['backupid' => $backup->get('id'), 'action' => 'unrestore', 'sesskey' => sesskey()]),
+                    new pix_icon('t/dockclose', $str_unrestore),
+                    $confirm_unrestore,
+                    ['title' => $str_unrestore]
                 );
             }
 
-            if(!$deleted){
+            if (!$is_deleted) {
                 $actions[] = $OUTPUT->action_icon(
-                    new moodle_url(
-                        $this->baseurl,
-                        [
-                            'backupid' => $backup->get('id'),
-                            'action' => 'delete',
-                            'sesskey' => sesskey()
-                        ]
-                    ),
-                    new pix_icon('t/delete', $str_delete_local),
-                    $confirm_delete_action,
-                    [
-                        'title' => $str_delete_local,
-                    ]
+                    new moodle_url($this->baseurl, ['backupid' => $backup->get('id'), 'action' => 'delete', 'sesskey' => sesskey()]),
+                    new pix_icon('t/delete', $str_delete),
+                    $confirm_delete,
+                    ['title' => $str_delete]
                 );
             }
-            
-            $data[] = implode('&nbsp;', $actions);
-            $this->add_data($data);
+
+            $row[] = implode('&nbsp;', $actions);
+            $this->add_data($row);
         }
+
         $this->finish_output();
     }
 }

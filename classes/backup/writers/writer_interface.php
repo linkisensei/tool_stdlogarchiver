@@ -1,14 +1,19 @@
 <?php namespace tool_stdlogarchiver\backup\writers;
 
-use \stored_file;
+interface writer_interface {
 
-interface writer_interface{
+    public function get_format_name(): string;
 
-    public function get_format_name() : string;
+    public function append(object $row): void;
 
-    public function append(object $row);
-    
-    public function to_stored_file() : stored_file;
+    /**
+     * Finalize and persist the backup file.
+     * Called on success — file stays on disk.
+     */
+    public function finalize(): void;
 
-    public function destroy();
+    /**
+     * Abort and clean up. Called on error — deletes the file.
+     */
+    public function destroy(): void;
 }

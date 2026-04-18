@@ -5,7 +5,7 @@
         "vendor-dir": "libs/"
     },
     "require": {
-        "aws/aws-sdk-php": "^3.299"
+        "aws/aws-sdk-php": "^3.300"
     },
     "authors": [
         {

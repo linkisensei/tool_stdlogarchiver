@@ -1,8 +1,8 @@
 <?php namespace tool_stdlogarchiver\task;
 
 use \tool_stdlogarchiver\config;
-use \tool_stdlogarchiver\util\standard_logstore;
 use \tool_stdlogarchiver\models\backup;
+use \tool_stdlogarchiver\util\standard_logstore;
 use \tool_stdlogarchiver\util\logstored_other_trait;
 
 defined('MOODLE_INTERNAL') || die();
@@ -12,108 +12,149 @@ class archive_task extends \core\task\scheduled_task {
     use logstored_other_trait;
 
     /**
-     * Get a descriptive name for this task (shown to admins).
-     *
-     * @return string
+     * Safety cap to avoid processing too many calendar days in a single run.
      */
-    public function get_name() {
-        return get_string('task:cleanup', 'tool_stdlogarchiver');
+    private const MAX_DAYS_PER_RUN = 10;
+
+    public function get_name(): string {
+        return get_string('task:archive_task_name', 'tool_stdlogarchiver');
     }
 
-    /**
-     * Do the job.
-     * Throw exceptions on errors (the job will be retried).
-     */
-    public function execute() {
+    public function execute(): void {
         global $DB;
 
-        if(!config::is_enabled()){
-            mtrace('Plug-in disabled.');
+        if (!config::is_enabled()) {
+            mtrace('tool_stdlogarchiver: plugin disabled, skipping.');
             return;
         }
 
         raise_memory_limit(MEMORY_HUGE);
         \core_php_time_limit::raise();
 
-        $max_execution_time = 5 * MINSECS;
-        $execution_starttime = time();
-        $execution_timelimit = $execution_starttime + $max_execution_time;
+        $logstore     = standard_logstore::instance();
+        $table        = $logstore->get_logstore_table();
+        $cutoff       = time() - config::get_log_lifetime();
+        $max_per_file = config::get_max_records_per_file();
+        $processed_days = 0;
 
-        while(true){
-            $not_enough_records = !$this->backup_logs_to_file();
-            if($not_enough_records || time() > $execution_timelimit){
+        // Watermark: the highest lastid ever archived, derived from the backups
+        // table. The task never processes IDs at or below this value, permanently
+        // protecting restored records (reinserted with original IDs) from being
+        // re-archived.
+        $min_id = (int) $DB->get_field_sql("SELECT COALESCE(MAX(lastid), 0) FROM {tool_stdlogarchiver_backups}");
+
+        mtrace("tool_stdlogarchiver: starting from watermark id={$min_id}");
+
+        while (true) {
+            $min_tc = $DB->get_field_sql(
+                "SELECT MIN(timecreated) FROM {{$table}}
+                 WHERE timecreated < :cutoff AND id > :min_id",
+                ['cutoff' => $cutoff, 'min_id' => $min_id]
+            );
+
+            if (!$min_tc) {
+                mtrace('tool_stdlogarchiver: no more records to archive.');
                 break;
+            }
+
+            $day_start = (int) floor($min_tc / DAYSECS) * DAYSECS;
+            $day_end   = $day_start + DAYSECS;
+            $processed_days++;
+
+            mtrace('tool_stdlogarchiver: archiving day ' . gmdate('Y-m-d', $day_start));
+
+            // Inner loop: chunks through the day until it is fully archived.
+            // Always runs to completion regardless of elapsed time.
+            while (true) {
+                $records = $DB->get_records_select(
+                    $table,
+                    "timecreated >= :day_start AND timecreated < :day_end
+                     AND timecreated < :cutoff AND id > :min_id",
+                    compact('day_start', 'day_end', 'cutoff', 'min_id'),
+                    'id ASC', '*', 0, $max_per_file
+                );
+
+                if (empty($records)) {
+                    break; // Day fully archived.
+                }
+
+                $this->write_chunk($table, $records);
+
+                $min_id = (int) end($records)->id;
+            }
+
+            if ($processed_days >= self::MAX_DAYS_PER_RUN) {
+                mtrace(sprintf(
+                    'tool_stdlogarchiver: execution limit reached (%d day(s) processed), stopping for now.',
+                    self::MAX_DAYS_PER_RUN
+                ));
+                return;
             }
         }
     }
 
-
-    /**
-     * Backup a number of log records and then deletes them
-     * from the database.
-     * 
-     * @return boolean false if there are not enough records
-     */
-    protected function backup_logs_to_file() : bool {
+    private function write_chunk(string $table, array $records): void {
         global $DB;
 
+        if (empty($records)) {
+            return;
+        }
+
+        $first  = reset($records);
+        $last   = end($records);
+        $format = config::get_backup_format();
+
+        $filename = sprintf('%d_%d.%s', (int) $first->timecreated, (int) $last->timecreated, $format);
+        $backupdir = config::get_backup_dir();
+        $filepath = $backupdir . '/' . $filename;
+        $temppath = $backupdir . '/.' . $filename . '.tmp';
+
+        if (file_exists($filepath)) {
+            throw new \RuntimeException("Refusing to overwrite existing backup file: {$filename}");
+        }
+
+        if (file_exists($temppath)) {
+            @unlink($temppath);
+        }
+
         $writer_class = config::get_writer_class();
-        $writer = new $writer_class();
-
-        $logstore_helper = standard_logstore::instance();
-        $table = $logstore_helper->get_logstore_table();
-        $limit = config::get_records_per_file();
-        $min_quantity = floor($limit/2);
-
-        $params = [
-            'max_timecreated' => time() - config::get_log_lifetime(),
-            'min_id' => 0,
-        ];
-
-        if($previous_backup = backup::get_last_backup()){
-            $params['min_id'] = $previous_backup->get('lastid');
-        }
-
-        $select = "timecreated < :max_timecreated AND id > :min_id";
-
-        $log_records_count = $DB->count_records_select($table, $select, $params);
-        if($log_records_count < $min_quantity){
-            return false; // Not enough records to proceed
-        }
-        
-        $records = $DB->get_records_select($table, $select, $params, 'id', '*', 0, $limit);
-
-        $last_record = end($records);
-        $first_record = reset($records);
-
-        foreach ($records as $record) {
-            $record->other = self::to_json($record->other); // Always encoded as json
-            $writer->append($record);
-        }
-
-        $file = $writer->to_stored_file();
-        $writer->destroy(); // Making sure its destroyed
-        
-        $raw_backup_record = [
-            'firstid' => $first_record->id,
-            'starttime' => $first_record->timecreated,
-            'lastid' => $last_record->id,
-            'endtime' => $last_record->timecreated,
-        ];
-        $backup_record = backup::create_from($raw_backup_record, $file);
+        $writer       = new $writer_class($temppath);
 
         try {
-            $DB->delete_records_select($table, "id BETWEEN :firstid AND :lastid", $raw_backup_record);
-            $backup_record->save();
+            foreach ($records as $record) {
+                $record->other = self::to_json($record->other);
+                $writer->append($record);
+            }
+            $writer->finalize();
 
-            mtrace('Backup #' . $backup_record->get('id') . ' created');
-            mtrace('Logs from ' . $backup_record->get('firstid') . ' to ' . $backup_record->get('lastid') . ' deleted!');
-            return true;
-
-        } catch (\Exception $e) {
-            $file->delete();
+            if (!@rename($temppath, $filepath)) {
+                @unlink($temppath);
+                throw new \RuntimeException("Failed to promote temporary backup file to final path: {$filename}");
+            }
+        } catch (\Throwable $e) {
+            $writer->destroy();
+            @unlink($temppath);
             throw $e;
         }
-    }
 
+        $backup_record = new backup(0, (object) [
+            'firstid'    => (int) $first->id,
+            'lastid'     => (int) $last->id,
+            'starttime'  => (int) $first->timecreated,
+            'endtime'    => (int) $last->timecreated,
+            'fileformat' => $format,
+            'local_path' => $filename, // relative to backup_dir — resolved in backup::get_local_path()
+        ]);
+        $backup_record->save();
+
+        // DELETE by explicit IDs — avoids BETWEEN race condition.
+        $ids = array_column($records, 'id');
+        foreach (array_chunk($ids, 1000) as $chunk) {
+            [$in_sql, $in_params] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED, 'logid');
+            $DB->delete_records_select($table, "id $in_sql", $in_params);
+        }
+
+        mtrace(sprintf('tool_stdlogarchiver: archived %d records → %s (Backup #%d)',
+            count($records), $filename, $backup_record->get('id')));
+    }
 }

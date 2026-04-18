@@ -27,11 +27,14 @@ $PAGE->navbar->add(get_string('searchbackups:title', 'tool_stdlogarchiver'), $ur
 $search_form = new tool_stdlogarchiver\output\renderables\forms\search_form();
 
 $filters = $search_form->get_data();
-if(empty($filters) || $search_form->is_cancelled()){
+if (empty($filters) || $search_form->is_cancelled()) {
     $search_form->set_data([
         'starttime' => strtotime(date('Y-m-d', time() - 4 * WEEKSECS)),
         'endtime' => time(),
     ]);
+    $filters = [];
+} else {
+    $filters = (array) $filters;
 }
 
 // Output

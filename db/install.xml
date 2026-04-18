@@ -1,42 +1,34 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="admin/tool/stdlogarchiver/db" VERSION="20240218" COMMENT="XMLDB file for Moodle admin/tool/stdlogarchiver"
+<XMLDB PATH="admin/tool/stdlogarchiver/db" VERSION="20241201" COMMENT="XMLDB file for Moodle admin/tool/stdlogarchiver"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../../lib/xmldb/xmldb.xsd"
 >
   <TABLES>
-    <TABLE NAME="tool_stdlogarchiver_backups" COMMENT="Default comment for tool_stdlogarchiver, please edit me">
+    <TABLE NAME="tool_stdlogarchiver_backups" COMMENT="Metadata for each archived backup file">
       <FIELDS>
         <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
-        <FIELD NAME="firstid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
-        <FIELD NAME="lastid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
-        <FIELD NAME="starttime" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
-        <FIELD NAME="endtime" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
-        <FIELD NAME="fileformat" TYPE="char" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="pathnamehash" TYPE="char" LENGTH="40" NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="restored" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-        <FIELD NAME="deleted" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="firstid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Original logstore first record ID"/>
+        <FIELD NAME="lastid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Original logstore last record ID"/>
+        <FIELD NAME="starttime" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="timecreated of first record in file"/>
+        <FIELD NAME="endtime" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="timecreated of last record in file"/>
+        <FIELD NAME="fileformat" TYPE="char" LENGTH="10" NOTNULL="false" SEQUENCE="false" COMMENT="db or csv"/>
+        <FIELD NAME="local_path" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Absolute filesystem path of local file; null if not present locally"/>
+        <FIELD NAME="external_service" TYPE="char" LENGTH="40" NOTNULL="false" SEQUENCE="false" COMMENT="External storage service name (s3, gcs...); null if not migrated"/>
+        <FIELD NAME="external_uri" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="Full URI in external storage, e.g. s3://bucket/path/file.db.gz"/>
+        <FIELD NAME="external_customdata" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="JSON metadata: sizes, compression info, etc."/>
+        <FIELD NAME="restored" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="1 = logs restored back to logstore"/>
+        <FIELD NAME="deleted_at" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="0 = active; unix timestamp = soft-deleted at this time"/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
       </FIELDS>
       <KEYS>
         <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
       </KEYS>
-    </TABLE>
-    <TABLE NAME="tool_stdlogarchiver_ext_bkps" COMMENT="Stores external backups">
-      <FIELDS>
-        <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
-        <FIELD NAME="backupid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
-        <FIELD NAME="service" TYPE="char" LENGTH="40" NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="externalpath" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="customdata" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
-        <FIELD NAME="deleted" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-        <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-        <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
-      </FIELDS>
-      <KEYS>
-        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
-        <KEY NAME="fk_backup" TYPE="foreign" FIELDS="backupid" REFTABLE="tool_stdlogarchiver_backups" REFFIELDS="id"/>
-      </KEYS>
+      <INDEXES>
+        <INDEX NAME="idx_starttime_endtime" UNIQUE="false" FIELDS="starttime, endtime"/>
+        <INDEX NAME="idx_deleted_at" UNIQUE="false" FIELDS="deleted_at"/>
+        <INDEX NAME="idx_fileformat" UNIQUE="false" FIELDS="fileformat"/>
+      </INDEXES>
     </TABLE>
   </TABLES>
 </XMLDB>

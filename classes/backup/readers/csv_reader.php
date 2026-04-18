@@ -1,53 +1,36 @@
 <?php namespace tool_stdlogarchiver\backup\readers;
 
-use \stored_file;
 use \Generator;
-use \SplFileObject;
 
-class csv_reader implements reader_interface{
-    protected $file;
+class csv_reader implements reader_interface {
 
-    protected function __construct(stored_file $file){
-        $this->file = $file;
+    private string $filepath;
+
+    public function __construct(string $filepath) {
+        $this->filepath = $filepath;
     }
 
-    public static function create(stored_file $file) : reader_interface {
-        return new static($file);
+    public static function create(string $filepath): reader_interface {
+        return new static($filepath);
     }
 
-    /**
-     * @return object[]
-     */
-    public function get_contents() : array {
-        $file_handle = $this->file->get_content_file_handle();
-
-        if($file_handle === false){
-            return [];
+    public function get_contents(): array {
+        $handle  = fopen($this->filepath, 'rb');
+        $headers = fgetcsv($handle);
+        $rows    = [];
+        while (($line = fgetcsv($handle)) !== false) {
+            $rows[] = (object) array_combine($headers, $line);
         }
-
-        $contents = [];
-        $headers = fgetcsv($file_handle);
-
-        while(($line = fgetcsv($file_handle)) !== false){
-            $contents[] = (object) array_combine($headers, $line);
-        }
-
-        fclose($file_handle);
-        return $contents;
+        fclose($handle);
+        return $rows;
     }
 
-    /**
-     * @return Generator<object>
-     */
-    public function get_contents_generator() : Generator {
-        $file_handle = $this->file->get_content_file_handle();
-
-        $headers = fgetcsv($file_handle);
-
-        while(($line = fgetcsv($file_handle)) !== false){
+    public function get_contents_generator(): Generator {
+        $handle  = fopen($this->filepath, 'rb');
+        $headers = fgetcsv($handle);
+        while (($line = fgetcsv($handle)) !== false) {
             yield (object) array_combine($headers, $line);
         }
-        fclose($file_handle);
+        fclose($handle);
     }
-
 }

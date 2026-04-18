@@ -16,9 +16,9 @@ trait logstored_other_trait{
      *
      * @see \logstore_standard\log\store::decode_other()
      * @param string $string JSON or SERIALIZED data
-     * @return string
+     * @return string|null
      */
-    public static function to_json(?string $other) : string {
+    public static function to_json(?string $other) : ?string {
         if ($other === 'N;' || preg_match('~^.:~', $other ?? '')) {
             return json_encode(@unserialize($other));
         } else {
