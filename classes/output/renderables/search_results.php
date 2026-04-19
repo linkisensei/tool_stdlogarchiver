@@ -11,6 +11,7 @@ class search_results implements renderable, IteratorAggregate {
 
     protected array $results     = [];
     protected array $searched    = [];
+    protected array $truncated   = [];
     protected array $pending     = [];
     protected array $unavailable = [];
     protected int   $skipped_csv = 0;
@@ -39,6 +40,7 @@ class search_results implements renderable, IteratorAggregate {
 
         $this->results     = $result['results'];
         $this->searched    = $result['searched'];
+        $this->truncated   = $result['truncated'];
         $this->pending     = $result['pending'];
         $this->unavailable = $result['unavailable'];
         $this->skipped_csv = $result['skipped_csv'];
@@ -62,6 +64,11 @@ class search_results implements renderable, IteratorAggregate {
         return $this->pending;
     }
 
+    /** Backups whose result set was truncated by the per-backup SQLite limit. */
+    public function get_truncated_backups(): array {
+        return $this->truncated;
+    }
+
     /** Backups with no local file and no external storage reference. */
     public function get_unavailable_backups(): array {
         return $this->unavailable;
@@ -78,5 +85,9 @@ class search_results implements renderable, IteratorAggregate {
 
     public function has_pending(): bool {
         return !empty($this->pending);
+    }
+
+    public function has_truncated(): bool {
+        return !empty($this->truncated);
     }
 }

@@ -62,7 +62,7 @@ class sqlite_reader implements reader_interface {
      * @param array $filters   Optional: userid, courseid, eventname, relateduserid, origin
      * @return Generator<object>
      */
-    public function search(int $starttime, int $endtime, array $filters = []): Generator {
+    public function search(int $starttime, int $endtime, array $filters = [], ?int $limit = null): Generator {
         $db = $this->open();
 
         $where    = ['timecreated >= :starttime', 'timecreated <= :endtime'];
@@ -94,6 +94,9 @@ class sqlite_reader implements reader_interface {
         }
 
         $sql  = 'SELECT * FROM logs WHERE ' . implode(' AND ', $where) . ' ORDER BY timecreated ASC';
+        if ($limit !== null) {
+            $sql .= ' LIMIT ' . max(0, (int) $limit);
+        }
         $stmt = $db->prepare($sql);
         if (!$stmt) {
             return;

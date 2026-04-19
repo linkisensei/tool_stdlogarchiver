@@ -32,6 +32,14 @@ class tool_stdlogarchiver_renderer extends plugin_renderer_base {
             );
         }
 
+        if ($renderable->has_truncated()) {
+            echo $OUTPUT->notification(
+                get_string('search:truncated_notice', 'tool_stdlogarchiver',
+                    count($renderable->get_truncated_backups())),
+                \core\output\notification::NOTIFY_WARNING
+            );
+        }
+
         $table = new search_results_table('search-results', $PAGE->url);
         $table->display($renderable);
 

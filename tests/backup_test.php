@@ -11,6 +11,10 @@ use \tool_stdlogarchiver\models\backup;
 
 class backup_test extends advanced_testcase {
 
+    private function expect_task_trace_output(): void {
+        $this->expectOutputRegex('/tool_stdlogarchiver:/');
+    }
+
     protected function setUp(): void {
         parent::setUp();
         $this->resetAfterTest();
@@ -52,6 +56,7 @@ class backup_test extends advanced_testcase {
         self::insert_log_records($user, 300, $now - 26 * WEEKSECS - DAYSECS);
         self::insert_log_records($user, 300, $now - 4 * WEEKSECS); // too recent — should not archive
 
+        $this->expect_task_trace_output();
         $task = new \tool_stdlogarchiver\task\archive_task();
         $task->execute();
 
@@ -76,8 +81,6 @@ class backup_test extends advanced_testcase {
 
     /** @group xcurrent */
     public function test_archive_task_creates_sqlite_file(): void {
-        global $DB;
-
         self::set_default_configs();
         config::set(config::CONFIG_BACKUP_FORMAT, config::BACKUP_FORMAT_DB);
 
@@ -86,6 +89,7 @@ class backup_test extends advanced_testcase {
 
         self::insert_log_records($user, 100, $now - YEARSECS);
 
+        $this->expect_task_trace_output();
         $task = new \tool_stdlogarchiver\task\archive_task();
         $task->execute();
 
@@ -98,7 +102,14 @@ class backup_test extends advanced_testcase {
 
         // Verify SQLite file is a valid database.
         $path = $backup->get_local_file_path();
-        $db = new \SQLite3('file:' . $path . '?immutable=1', SQLITE3_OPEN_READONLY | SQLITE3_OPEN_URI);
+        $openflags = SQLITE3_OPEN_READONLY;
+        $sqlitepath = $path;
+        if (defined('SQLITE3_OPEN_URI')) {
+            $openflags |= SQLITE3_OPEN_URI;
+            $sqlitepath = 'file:' . $path . '?immutable=1';
+        }
+
+        $db = new \SQLite3($sqlitepath, $openflags);
         $count = $db->querySingle('SELECT COUNT(*) FROM logs');
         $db->close();
 
@@ -118,6 +129,7 @@ class backup_test extends advanced_testcase {
         $DB->execute('DELETE FROM {' . $log_table . '}');
         self::insert_log_records($user, 200, $now - YEARSECS);
 
+        $this->expect_task_trace_output();
         $task = new \tool_stdlogarchiver\task\archive_task();
         $task->execute();
 
@@ -151,10 +163,12 @@ class backup_test extends advanced_testcase {
         $DB->execute('DELETE FROM {' . $log_table . '}');
         self::insert_log_records($user, 100, $now - YEARSECS);
 
+        $this->expect_task_trace_output();
         $task = new \tool_stdlogarchiver\task\archive_task();
         $task->execute();
 
-        $backup = reset(backup::get_records([]));
+        $backups = backup::get_records([]);
+        $backup = reset($backups);
         $backup->restore();
 
         // Re-run archive — the restored IDs should not be re-archived.
@@ -181,10 +195,11 @@ class backup_test extends advanced_testcase {
         $log_table = standard_logstore::instance()->get_logstore_table();
 
         $DB->execute('DELETE FROM {' . $log_table . '}');
-        for ($i = 0; $i < 12; $i++) {
+        for ($i = 11; $i >= 0; $i--) {
             self::insert_log_records($user, 1, $now - YEARSECS - ($i * DAYSECS));
         }
 
+        $this->expect_task_trace_output();
         $task = new \tool_stdlogarchiver\task\archive_task();
         $task->execute();
 

@@ -69,6 +69,10 @@ class fake_external_backup_service implements external_backup_service_interface 
 
 class external_storage_test extends advanced_testcase {
 
+    private function expect_task_trace_output(): void {
+        $this->expectOutputRegex('/tool_stdlogarchiver:/');
+    }
+
     protected function setUp(): void {
         parent::setUp();
         $this->resetAfterTest();
@@ -167,6 +171,7 @@ class external_storage_test extends advanced_testcase {
             'deleted_at' => time() - HOURSECS,
         ]);
 
+        $this->expect_task_trace_output();
         $task = new \tool_stdlogarchiver\task\backup_purge_task();
         $task->execute();
 
@@ -203,6 +208,7 @@ class external_storage_test extends advanced_testcase {
         ]);
         $backup->save();
 
+        $this->expect_task_trace_output();
         $task = new \tool_stdlogarchiver\task\external_migration_task();
         $task->execute();
 

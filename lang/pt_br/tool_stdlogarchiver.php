@@ -101,6 +101,7 @@ $string['search:search_info_title'] = 'Backups pesquisados';
 $string['search:search_info_desc']  = 'A tabela abaixo mostra quais arquivos de backup foram consultados para o intervalo de tempo informado.';
 $string['search:pending_notice']    = 'Alguns backups estão armazenados apenas em armazenamento externo e estão sendo baixados em segundo plano. Por favor, refaça a pesquisa em alguns minutos para incluir os resultados deles.';
 $string['search:skipped_csv_notice'] = '{$a} backup(s) neste intervalo de tempo utilizam o formato CSV e não podem ser pesquisados. Apenas backups SQLite (.db) são pesquisáveis.';
+$string['search:truncated_notice'] = 'Os resultados foram limitados para {$a} backup(s) para manter a busca responsiva. Refine os filtros para ver mais correspondências.';
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 $string['action:delete_local_backup']    = 'Excluir backup';

@@ -6,6 +6,8 @@ use \tool_stdlogarchiver\task\cache_download_task;
 
 class search_service {
 
+    private const RESULTS_LIMIT_PER_BACKUP = 1000;
+
     public function __construct() {
         raise_memory_limit(MEMORY_EXTRA);
         \core_php_time_limit::raise();
@@ -21,6 +23,7 @@ class search_service {
      * @return array {
      *   results:     object[]   — records found immediately
      *   searched:    backup[]   — backups that were successfully queried
+     *   truncated:   backup[]   — backups whose results were limited
      *   skipped_csv: int        — number of CSV backups in range (not searchable)
      *   pending:     backup[]   — backups queued for remote download
      *   unavailable: backup[]   — backups with no local file and no external storage
@@ -30,6 +33,7 @@ class search_service {
         $results = [
             'results'     => [],
             'searched'    => [],
+            'truncated'   => [],
             'skipped_csv' => 0,
             'pending'     => [],
             'unavailable' => [],
@@ -55,7 +59,13 @@ class search_service {
 
             try {
                 $reader = new sqlite_reader($path);
-                foreach ($reader->search($starttime, $endtime, $filters) as $record) {
+                $found = 0;
+                foreach ($reader->search($starttime, $endtime, $filters, self::RESULTS_LIMIT_PER_BACKUP + 1) as $record) {
+                    $found++;
+                    if ($found > self::RESULTS_LIMIT_PER_BACKUP) {
+                        $results['truncated'][] = $backup;
+                        break;
+                    }
                     $record->backupid = $backup->get('id');
                     $results['results'][] = $record;
                 }

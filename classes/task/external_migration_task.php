@@ -28,7 +28,7 @@ class external_migration_task extends \core\task\scheduled_task {
 
         $records = $DB->get_records_sql(
             "SELECT * FROM {tool_stdlogarchiver_backups}
-             WHERE timecreated < :cutoff
+             WHERE timecreated <= :cutoff
                AND deleted_at = 0
                AND external_service IS NULL
                AND local_path IS NOT NULL
