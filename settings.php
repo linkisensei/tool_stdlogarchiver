@@ -68,7 +68,7 @@ if ($hassiteconfig) {
             'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_MAX_RECORDS_PER_FILE,
             new lang_string('settings:max_records_per_file', 'tool_stdlogarchiver'),
             new lang_string('settings:max_records_per_file_desc', 'tool_stdlogarchiver'),
-            200000,
+            500000,
             [
                 50000  => '50,000',
                 100000 => '100,000',
@@ -81,7 +81,7 @@ if ($hassiteconfig) {
             'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_LOG_LIFETIME,
             new lang_string('settings:log_lifetime', 'tool_stdlogarchiver'),
             new lang_string('settings:log_lifetime_desc', 'tool_stdlogarchiver'),
-            26 * WEEKSECS,
+            5 * WEEKSECS,
             WEEKSECS
         ));
 
@@ -113,7 +113,7 @@ if ($hassiteconfig) {
             'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_CACHE_TTL,
             new lang_string('settings:cache_ttl', 'tool_stdlogarchiver'),
             new lang_string('settings:cache_ttl_desc', 'tool_stdlogarchiver'),
-            86400,
+            7 * DAYSECS,
             3600
         ));
 
@@ -158,7 +158,7 @@ if ($hassiteconfig) {
             'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_EXTERNAL_MIGRATION_DELAY,
             new lang_string('settings:external_migration_delay', 'tool_stdlogarchiver'),
             new lang_string('settings:external_migration_delay_desc', 'tool_stdlogarchiver'),
-            0,
+            7 * DAYSECS,
             DAYSECS
         ));
 
