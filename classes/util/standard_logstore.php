@@ -15,12 +15,20 @@ class standard_logstore{
     private static $instance;
 
     public function __construct(){
-        $manager = get_log_manager();        
+        $manager = get_log_manager();
         foreach ($manager->get_readers() as $component => $reader) {
             if(is_a($reader, \logstore_standard\log\store::class)){
                 $this->reader = $reader;
                 $this->component = $component;
             }
+        }
+
+        // logstore_standard may be installed but disabled as an active reader
+        // (e.g. when a gateway logstore is the only enabled store). Instantiate
+        // it directly so we can still resolve the table name and columns.
+        if ($this->reader === null && class_exists(\logstore_standard\log\store::class)) {
+            $this->reader = new \logstore_standard\log\store($manager);
+            $this->component = 'logstore_standard';
         }
     }
 

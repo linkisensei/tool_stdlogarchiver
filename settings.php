@@ -50,7 +50,7 @@ if ($hassiteconfig) {
             'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_ENABLED,
             new lang_string('enable'),
             '',
-            1
+            0
         ));
 
         $settingspage->add(new admin_setting_configselect(
@@ -81,7 +81,7 @@ if ($hassiteconfig) {
             'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_LOG_LIFETIME,
             new lang_string('settings:log_lifetime', 'tool_stdlogarchiver'),
             new lang_string('settings:log_lifetime_desc', 'tool_stdlogarchiver'),
-            5 * WEEKSECS,
+            12 * WEEKSECS,
             WEEKSECS
         ));
 
@@ -113,7 +113,7 @@ if ($hassiteconfig) {
             'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_CACHE_TTL,
             new lang_string('settings:cache_ttl', 'tool_stdlogarchiver'),
             new lang_string('settings:cache_ttl_desc', 'tool_stdlogarchiver'),
-            7 * DAYSECS,
+            2 * DAYSECS,
             3600
         ));
 
@@ -166,7 +166,7 @@ if ($hassiteconfig) {
             'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_DELETE_LOCAL_AFTER_EXTERNAL,
             new lang_string('settings:delete_local_after_external', 'tool_stdlogarchiver'),
             new lang_string('settings:delete_local_after_external_desc', 'tool_stdlogarchiver'),
-            0
+            1
         ));
 
         // ── AWS / S3 ─────────────────────────────────────────────────────────
