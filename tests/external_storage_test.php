@@ -165,8 +165,8 @@ class external_storage_test extends advanced_testcase {
     }
 
     /** @group xcurrent */
-    public function test_backup_purge_task_clears_remote_metadata_when_remote_file_is_missing(): void {
-        fake_external_backup_service::$exists_result = false;
+    public function test_backup_purge_task_preserves_remote_metadata(): void {
+        fake_external_backup_service::$exists_result = true;
         $backup = $this->create_external_backup_record([
             'deleted_at' => time() - HOURSECS,
         ]);
@@ -177,10 +177,12 @@ class external_storage_test extends advanced_testcase {
 
         $backup = new backup($backup->get('id'));
 
+        // External deletion is gated behind config::FEATURE_PURGE_EXTERNAL (currently off).
+        // The purge task must never touch remote files or their metadata.
         $this->assertSame(0, fake_external_backup_service::$delete_calls);
-        $this->assertNull($backup->get('external_service'));
-        $this->assertNull($backup->get('external_uri'));
-        $this->assertNull($backup->get('external_customdata'));
+        $this->assertSame(fake_external_backup_service::get_name(), $backup->get('external_service'));
+        $this->assertNotNull($backup->get('external_uri'));
+        $this->assertNotNull($backup->get('external_customdata'));
     }
 
     /** @group xcurrent */

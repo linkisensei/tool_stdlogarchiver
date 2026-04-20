@@ -2,7 +2,7 @@
 
 /**
  * @package  tool_stdlogarchiver
- * @author   Lucas Barreto <lucas.barreto@revvo.com.br>
+ * @author   Lucas Barreto <lucas.b.fisica@gmail.com>
  * @license  MIT
  */
 

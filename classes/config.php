@@ -26,6 +26,12 @@ class config {
     const CONFIG_S3_BUCKET                 = 's3_bucket';
     const CONFIG_S3_FOLDER                 = 's3_folder';
 
+    // Feature flags (code-only, no admin setting).
+    // Set to true to allow purge tasks to also delete files from external storage.
+    // Disabled by default to prevent accidental data loss; infrastructure owns the
+    // remote lifecycle until this is explicitly re-enabled.
+    const FEATURE_PURGE_EXTERNAL = false;
+
     // Backup format identifiers.
     const BACKUP_FORMAT_DB  = 'db';
     const BACKUP_FORMAT_CSV = 'csv';

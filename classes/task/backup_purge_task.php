@@ -6,12 +6,15 @@ use \tool_stdlogarchiver\models\backup;
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * Permanently deletes backup files (local + external) for:
+ * Permanently deletes local backup files for:
  *   1. Backups soft-deleted by the user (deleted_at > 0)
  *   2. Backups older than backup_retention_ttl (auto-purge, if TTL is configured)
  *
- * After physical deletion, local_path and external_service/uri are nullified.
- * The DB record is preserved as audit history.
+ * Remote file deletion is gated behind config::FEATURE_PURGE_EXTERNAL (currently
+ * disabled). When disabled, external metadata is preserved in the DB so that
+ * infrastructure tooling can reconcile remote storage independently.
+ *
+ * The DB record itself is always preserved as audit history.
  */
 class backup_purge_task extends \core\task\scheduled_task {
 
@@ -22,7 +25,7 @@ class backup_purge_task extends \core\task\scheduled_task {
     public function execute(): void {
         global $DB;
 
-        // Auto-purge: backups older than retention TTL that have not been soft-deleted yet.
+        // Auto-purge: backups older than retention TTL — delete local file only, preserve remote.
         $retention_ttl = config::get_backup_retention_ttl();
         if ($retention_ttl > 0) {
             $auto_cutoff = time() - $retention_ttl;
@@ -30,16 +33,14 @@ class backup_purge_task extends \core\task\scheduled_task {
                 "SELECT * FROM {tool_stdlogarchiver_backups}
                  WHERE timecreated < :cutoff
                    AND deleted_at = 0
-                   AND restored = 0",
+                   AND restored = 0
+                   AND local_path IS NOT NULL",
                 ['cutoff' => $auto_cutoff]
             );
 
             foreach ($auto_records as $record) {
                 $backup = new backup(0, $record);
-                // Soft-delete first, then fall through to physical purge below.
-                $backup->set('deleted_at', time());
-                $backup->save();
-                mtrace("tool_stdlogarchiver: auto-soft-deleted backup #{$record->id} (retention TTL)");
+                $this->purge_local_file($backup);
             }
         }
 
@@ -57,41 +58,61 @@ class backup_purge_task extends \core\task\scheduled_task {
         }
     }
 
+    private function purge_local_file(backup $backup): void {
+        $id = $backup->get('id');
+        if ($backup->local_file_exists()) {
+            @unlink($backup->get_local_file_path());
+            mtrace("tool_stdlogarchiver: backup #{$id} — local file deleted (retention TTL)");
+        }
+        $backup->set('local_path', null);
+
+        if (config::FEATURE_PURGE_EXTERNAL) {
+            $this->delete_external($backup);
+        }
+
+        $backup->save();
+    }
+
     private function purge_backup(backup $backup): void {
         $id = $backup->get('id');
 
-        // Delete local file.
         if ($backup->local_file_exists()) {
             @unlink($backup->get_local_file_path());
             mtrace("tool_stdlogarchiver: backup #{$id} — local file deleted");
         }
+        $backup->set('local_path', null);
 
-        // Delete from external storage.
-        if ($backup->has_external()) {
-            $service = config::get_external_backup_service($backup->get('external_service'));
-            if ($service) {
-                $external_uri = $backup->get('external_uri');
-
-                if ($service->exists($external_uri)) {
-                    try {
-                        $service->delete($external_uri);
-                        mtrace("tool_stdlogarchiver: backup #{$id} — external file deleted ({$external_uri})");
-                    } catch (\Throwable $e) {
-                        mtrace("tool_stdlogarchiver: backup #{$id} — external delete failed: " . $e->getMessage());
-                    }
-                } else {
-                    mtrace("tool_stdlogarchiver: backup #{$id} — external file already missing or unverifiable ({$external_uri})");
-                }
-            }
+        if (config::FEATURE_PURGE_EXTERNAL) {
+            $this->delete_external($backup);
         }
 
-        // Nullify file references, keep DB record as audit.
-        $backup->set('local_path', null);
+        $backup->save();
+        mtrace("tool_stdlogarchiver: backup #{$id} fully purged");
+    }
+
+    private function delete_external(backup $backup): void {
+        if (!$backup->has_external()) {
+            return;
+        }
+        $id = $backup->get('id');
+        $service = config::get_external_backup_service($backup->get('external_service'));
+        if (!$service) {
+            return;
+        }
+        $uri = $backup->get('external_uri');
+        if ($service->exists($uri)) {
+            try {
+                $service->delete($uri);
+                mtrace("tool_stdlogarchiver: backup #{$id} — external file deleted ({$uri})");
+            } catch (\Throwable $e) {
+                mtrace("tool_stdlogarchiver: backup #{$id} — external delete failed: " . $e->getMessage());
+                return;
+            }
+        } else {
+            mtrace("tool_stdlogarchiver: backup #{$id} — external file already missing ({$uri})");
+        }
         $backup->set('external_service', null);
         $backup->set('external_uri', null);
         $backup->set('external_customdata', null);
-        $backup->save();
-
-        mtrace("tool_stdlogarchiver: backup #{$id} fully purged");
     }
 }
