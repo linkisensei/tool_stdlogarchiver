@@ -195,7 +195,7 @@ class backup_test extends advanced_testcase {
         $log_table = standard_logstore::instance()->get_logstore_table();
 
         $DB->execute('DELETE FROM {' . $log_table . '}');
-        for ($i = 11; $i >= 0; $i--) {
+        for ($i = 31; $i >= 0; $i--) {
             self::insert_log_records($user, 1, $now - YEARSECS - ($i * DAYSECS));
         }
 
@@ -204,7 +204,7 @@ class backup_test extends advanced_testcase {
         $task->execute();
 
         $this->assertCount(
-            10,
+            \tool_stdlogarchiver\task\archive_task::MAX_DAYS_PER_RUN,
             backup::get_records([]),
             'Archive task should stop after processing the configured per-run cap of days'
         );

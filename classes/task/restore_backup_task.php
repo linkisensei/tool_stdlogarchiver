@@ -14,6 +14,12 @@ class restore_backup_task extends adhoc_task {
             mtrace('Restoring backup #' . $data['backupid']);
 
             $backup = new backup($data['backupid']);
+
+            if (!$backup->local_file_exists() && !$backup->is_cached() && $backup->has_external()) {
+                mtrace('Backup #' . $data['backupid'] . ' is remote-only, downloading to cache...');
+                $backup->download_to_cache();
+            }
+
             $backup->restore();
 
         } catch (\Throwable $th) {

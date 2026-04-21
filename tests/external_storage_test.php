@@ -82,6 +82,17 @@ class external_storage_test extends advanced_testcase {
         config::set_external_backup_services_override_for_testing([
             fake_external_backup_service::get_name() => fake_external_backup_service::class,
         ]);
+
+        // Remove any cache files left by previous test runs so is_cached() never
+        // returns a stale true and causes tasks to skip their download path.
+        $cache_dir = config::get_cache_dir();
+        if (is_dir($cache_dir)) {
+            foreach (glob($cache_dir . '/*') ?: [] as $file) {
+                if (is_file($file)) {
+                    @unlink($file);
+                }
+            }
+        }
     }
 
     protected function tearDown(): void {
@@ -154,6 +165,42 @@ class external_storage_test extends advanced_testcase {
         $task = new \tool_stdlogarchiver\task\cache_download_task();
         $task->set_custom_data(['backupid' => $backup->get('id')]);
 
+        $this->expectException(\moodle_exception::class);
+        $this->expectExceptionMessage(get_string('externalbackupnotavailable', 'tool_stdlogarchiver'));
+
+        try {
+            $task->execute();
+        } finally {
+            $this->assertSame(0, fake_external_backup_service::$download_calls);
+        }
+    }
+
+    /** @group xcurrent */
+    public function test_backup_download_to_cache_fetches_from_external(): void {
+        fake_external_backup_service::$exists_result = true;
+        // Non-.gz URI so the fake service writes directly to the cache path (no gunzip step).
+        $backup = $this->create_external_backup_record([
+            'external_uri' => 's3://test-bucket/path/restore_download_test.db',
+        ]);
+
+        $backup->download_to_cache();
+
+        $this->assertSame(1, fake_external_backup_service::$download_calls);
+        $this->assertTrue(file_exists($backup->get_cache_path()));
+    }
+
+    /** @group xcurrent */
+    public function test_restore_backup_task_throws_when_remote_file_is_unavailable(): void {
+        fake_external_backup_service::$exists_result = false;
+        // Unique URI so the cache path never collides with other tests.
+        $backup = $this->create_external_backup_record([
+            'external_uri' => 's3://test-bucket/path/unavailable_backup.db.gz',
+        ]);
+
+        $task = new \tool_stdlogarchiver\task\restore_backup_task();
+        $task->set_custom_data(['backupid' => $backup->get('id')]);
+
+        $this->expectOutputRegex('/Restoring backup/');
         $this->expectException(\moodle_exception::class);
         $this->expectExceptionMessage(get_string('externalbackupnotavailable', 'tool_stdlogarchiver'));
 

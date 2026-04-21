@@ -1,9 +1,7 @@
 <?php namespace tool_stdlogarchiver\task;
 
 use \core\task\adhoc_task;
-use \tool_stdlogarchiver\config;
 use \tool_stdlogarchiver\models\backup;
-use \tool_stdlogarchiver\util\compression_helper;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -19,40 +17,13 @@ class cache_download_task extends adhoc_task {
 
         $backup = new backup($backupid);
 
-        // Already locally available — nothing to do.
         if ($backup->local_file_exists() || $backup->is_cached()) {
             return;
         }
 
-        if (!$backup->has_external()) {
-            throw new \moodle_exception('noexternalbackup', 'tool_stdlogarchiver');
-        }
+        $backup->download_to_cache();
 
-        $service = config::get_external_backup_service($backup->get('external_service'));
-        if (!$service) {
-            throw new \moodle_exception('noexternalservice', 'tool_stdlogarchiver');
-        }
-
-        $ext_uri = $backup->get('external_uri');
-        if (!$service->exists($ext_uri)) {
-            throw new \moodle_exception('externalbackupnotavailable', 'tool_stdlogarchiver');
-        }
-
-        $cache_path = $backup->get_cache_path();
-
-        // For .db.gz external files, download gz then decompress to .db.
-        if (str_ends_with($ext_uri, '.gz')) {
-            $gz_tmp = $cache_path . '.gz.tmp';
-            $service->download_to_path($ext_uri, $gz_tmp);
-            compression_helper::gunzip($gz_tmp, $cache_path);
-            @unlink($gz_tmp);
-        } else {
-            $service->download_to_path($ext_uri, $cache_path);
-        }
-
-        chmod($cache_path, 0444);
-
-        mtrace("tool_stdlogarchiver: backup #{$backupid} cached at {$cache_path}");
+        mtrace("tool_stdlogarchiver: backup #{$backupid} cached at {$backup->get_cache_path()}");
     }
 
     public static function create_and_enqueue(int $backupid): void {

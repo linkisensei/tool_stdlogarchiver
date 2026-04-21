@@ -14,7 +14,7 @@ class archive_task extends \core\task\scheduled_task {
     /**
      * Safety cap to avoid processing too many calendar days in a single run.
      */
-    private const MAX_DAYS_PER_RUN = 10;
+    public const MAX_DAYS_PER_RUN = 30;
 
     public function get_name(): string {
         return get_string('task:archive_task_name', 'tool_stdlogarchiver');

@@ -176,6 +176,30 @@ class backup extends persistent {
     // File operations
     // -------------------------------------------------------------------------
 
+    public function download_to_cache(): void {
+        if (!$this->has_external()) {
+            throw new \moodle_exception('noexternalbackup', 'tool_stdlogarchiver');
+        }
+        $service = config::get_external_backup_service($this->get('external_service'));
+        if (!$service) {
+            throw new \moodle_exception('noexternalservice', 'tool_stdlogarchiver');
+        }
+        $ext_uri = $this->get('external_uri');
+        if (!$service->exists($ext_uri)) {
+            throw new \moodle_exception('externalbackupnotavailable', 'tool_stdlogarchiver');
+        }
+        $cache_path = $this->get_cache_path();
+        if (str_ends_with($ext_uri, '.gz')) {
+            $gz_tmp = $cache_path . '.gz.tmp';
+            $service->download_to_path($ext_uri, $gz_tmp);
+            compression_helper::gunzip($gz_tmp, $cache_path);
+            @unlink($gz_tmp);
+        } else {
+            $service->download_to_path($ext_uri, $cache_path);
+        }
+        chmod($cache_path, 0444);
+    }
+
     public function delete_local_file(): void {
         $path = $this->get_local_file_path();
         if ($path && file_exists($path)) {
