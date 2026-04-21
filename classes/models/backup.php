@@ -63,9 +63,6 @@ class backup extends persistent {
         ];
     }
 
-    // -------------------------------------------------------------------------
-    // Status checks
-    // -------------------------------------------------------------------------
 
     public function is_deleted(): bool {
         return (int) $this->get('deleted_at') > 0;
@@ -90,9 +87,6 @@ class backup extends persistent {
         return !empty($this->get('external_service'));
     }
 
-    // -------------------------------------------------------------------------
-    // File location
-    // -------------------------------------------------------------------------
 
     public function get_filename(): string {
         return sprintf('%d_%d.%s',
@@ -172,10 +166,6 @@ class backup extends persistent {
         $this->set('external_customdata', json_encode($data));
     }
 
-    // -------------------------------------------------------------------------
-    // File operations
-    // -------------------------------------------------------------------------
-
     public function download_to_cache(): void {
         if (!$this->has_external()) {
             throw new \moodle_exception('noexternalbackup', 'tool_stdlogarchiver');
@@ -216,9 +206,6 @@ class backup extends persistent {
         $this->save();
     }
 
-    // -------------------------------------------------------------------------
-    // Reader / restore
-    // -------------------------------------------------------------------------
 
     public function get_reader(): reader_interface {
         $format       = $this->get('fileformat');
@@ -269,9 +256,6 @@ class backup extends persistent {
         return true;
     }
 
-    // -------------------------------------------------------------------------
-    // Download
-    // -------------------------------------------------------------------------
 
     public function get_download_url(): moodle_url {
         return new moodle_url('/admin/tool/stdlogarchiver/download.php', [
@@ -280,9 +264,6 @@ class backup extends persistent {
         ]);
     }
 
-    // -------------------------------------------------------------------------
-    // Static helpers
-    // -------------------------------------------------------------------------
 
     public static function get_last_backup(): ?static {
         $records = self::get_records([], 'id', 'DESC', 0, 1);
