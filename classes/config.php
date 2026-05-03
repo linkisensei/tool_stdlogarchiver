@@ -20,6 +20,8 @@ class config {
     const CONFIG_EXTERNAL_BACKUP_SERVICE   = 'external_backup_service';
     const CONFIG_EXTERNAL_MIGRATION_DELAY  = 'external_migration_delay';
     const CONFIG_DELETE_LOCAL_AFTER_EXTERNAL = 'delete_local_after_external';
+    const CONFIG_ARCHIVE_WATERMARK_TIME    = 'archive_watermark_time';
+    const CONFIG_ARCHIVE_WATERMARK_ID      = 'archive_watermark_id';
     const CONFIG_AWS_REGION                = 'aws_region';
     const CONFIG_AWS_KEY                   = 'aws_key';
     const CONFIG_AWS_SECRET                = 'aws_secret';
@@ -116,6 +118,18 @@ class config {
      */
     public static function get_external_migration_delay(): int {
         return (int) self::get(self::CONFIG_EXTERNAL_MIGRATION_DELAY, 0);
+    }
+
+    public static function get_archive_watermark(): object {
+        return (object) [
+            'time' => (int) self::get(self::CONFIG_ARCHIVE_WATERMARK_TIME, 0),
+            'id'   => (int) self::get(self::CONFIG_ARCHIVE_WATERMARK_ID, 0),
+        ];
+    }
+
+    public static function set_archive_watermark(int $time, int $id): void {
+        self::set(self::CONFIG_ARCHIVE_WATERMARK_TIME, $time);
+        self::set(self::CONFIG_ARCHIVE_WATERMARK_ID, $id);
     }
 
     public static function delete_local_after_external(): bool {

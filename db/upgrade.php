@@ -96,5 +96,26 @@ function xmldb_tool_stdlogarchiver_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2024120101, 'tool', 'stdlogarchiver');
     }
 
+    if ($oldversion < 2026050301) {
+        // Switch from ID-based watermark (MAX(lastid)) to composite time+id watermark.
+        // Seed wm_time from MAX(endtime) so records already covered are not re-archived.
+        // Seed wm_id from MAX(lastid) of backups at that endtime — this is exactly where
+        // the old system stopped for that timestamp, so records with the same timecreated
+        // but higher IDs remain eligible and are not silently dropped.
+        $wm_time = (int) $DB->get_field_sql(
+            "SELECT COALESCE(MAX(endtime), 0) FROM {tool_stdlogarchiver_backups}"
+        );
+        $wm_id = $wm_time > 0
+            ? (int) $DB->get_field_sql(
+                "SELECT COALESCE(MAX(lastid), 0) FROM {tool_stdlogarchiver_backups} WHERE endtime = :et",
+                ['et' => $wm_time]
+              )
+            : 0;
+        set_config('archive_watermark_time', $wm_time, 'tool_stdlogarchiver');
+        set_config('archive_watermark_id',   $wm_id,   'tool_stdlogarchiver');
+
+        upgrade_plugin_savepoint(true, 2026050301, 'tool', 'stdlogarchiver');
+    }
+
     return true;
 }

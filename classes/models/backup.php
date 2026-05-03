@@ -89,9 +89,10 @@ class backup extends persistent {
 
 
     public function get_filename(): string {
-        return sprintf('%d_%d.%s',
+        return sprintf('%d_%d_%d.%s',
             $this->get('starttime'),
             $this->get('endtime'),
+            $this->get('firstid'),
             $this->get('fileformat')
         );
     }
@@ -244,12 +245,26 @@ class backup extends persistent {
             return false;
         }
 
+        // Ensure the backup file is locally accessible before reading IDs from it.
+        // If neither the local file nor the cache is available, download synchronously
+        // to cache — the cache TTL and cleanup are managed by cache_cleanup_task.
+        try {
+            $reader = $this->get_reader();
+        } catch (\moodle_exception $e) {
+            $this->download_to_cache();
+            $reader = $this->get_reader();
+        }
+
+        $ids = [];
+        foreach ($reader->get_contents_generator() as $record) {
+            $ids[] = (int) $record->id;
+        }
+
         $logstore_table = standard_logstore::instance()->get_logstore_table();
-        $DB->delete_records_select(
-            $logstore_table,
-            'id BETWEEN :firstid AND :lastid',
-            ['firstid' => $this->get('firstid'), 'lastid' => $this->get('lastid')]
-        );
+        foreach (array_chunk($ids, 1000) as $chunk) {
+            [$in_sql, $in_params] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED, 'logid');
+            $DB->delete_records_select($logstore_table, "id $in_sql", $in_params);
+        }
 
         $this->set('restored', false);
         $this->save();

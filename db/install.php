@@ -9,6 +9,8 @@ function xmldb_tool_stdlogarchiver_install(): bool {
     \tool_stdlogarchiver\config::set(\tool_stdlogarchiver\config::CONFIG_BACKUP_FORMAT, \tool_stdlogarchiver\config::BACKUP_FORMAT_DB);
     \tool_stdlogarchiver\config::set(\tool_stdlogarchiver\config::CONFIG_LOG_LIFETIME, 26 * WEEKSECS);
     \tool_stdlogarchiver\config::set(\tool_stdlogarchiver\config::CONFIG_CACHE_TTL, 86400);
+    \tool_stdlogarchiver\config::set(\tool_stdlogarchiver\config::CONFIG_ARCHIVE_WATERMARK_TIME, 0);
+    \tool_stdlogarchiver\config::set(\tool_stdlogarchiver\config::CONFIG_ARCHIVE_WATERMARK_ID, 0);
 
     $backup_dir = $CFG->dataroot . '/tool_stdlogarchiver';
     if (!is_dir($backup_dir)) {

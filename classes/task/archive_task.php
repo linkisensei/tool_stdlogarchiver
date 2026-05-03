@@ -37,19 +37,22 @@ class archive_task extends \core\task\scheduled_task {
         $max_per_file = config::get_max_records_per_file();
         $processed_days = 0;
 
-        // Watermark: the highest lastid ever archived, derived from the backups
-        // table. The task never processes IDs at or below this value, permanently
-        // protecting restored records (reinserted with original IDs) from being
-        // re-archived.
-        $min_id = (int) $DB->get_field_sql("SELECT COALESCE(MAX(lastid), 0) FROM {tool_stdlogarchiver_backups}");
+        // Watermark: composite (timecreated, id) position of the last archived record.
+        // Records are selected in (timecreated ASC, id ASC) order and only those strictly
+        // after this position are eligible, preventing already-processed records from being
+        // revisited and ensuring records with out-of-order IDs are never skipped.
+        $wm      = config::get_archive_watermark();
+        $wm_time = $wm->time;
+        $wm_id   = $wm->id;
 
-        mtrace("tool_stdlogarchiver: starting from watermark id={$min_id}");
+        mtrace("tool_stdlogarchiver: starting from watermark time={$wm_time} id={$wm_id}");
 
         while (true) {
             $min_tc = $DB->get_field_sql(
                 "SELECT MIN(timecreated) FROM {{$table}}
-                 WHERE timecreated < :cutoff AND id > :min_id",
-                ['cutoff' => $cutoff, 'min_id' => $min_id]
+                 WHERE (timecreated > :wm_time OR (timecreated = :wm_time2 AND id > :wm_id))
+                   AND timecreated < :cutoff",
+                ['wm_time' => $wm_time, 'wm_time2' => $wm_time, 'wm_id' => $wm_id, 'cutoff' => $cutoff]
             );
 
             if (!$min_tc) {
@@ -69,9 +72,11 @@ class archive_task extends \core\task\scheduled_task {
                 $records = $DB->get_records_select(
                     $table,
                     "timecreated >= :day_start AND timecreated < :day_end
-                     AND timecreated < :cutoff AND id > :min_id",
-                    compact('day_start', 'day_end', 'cutoff', 'min_id'),
-                    'id ASC', '*', 0, $max_per_file
+                     AND (timecreated > :wm_time OR (timecreated = :wm_time2 AND id > :wm_id))
+                     AND timecreated < :cutoff",
+                    ['day_start' => $day_start, 'day_end' => $day_end,
+                     'wm_time' => $wm_time, 'wm_time2' => $wm_time, 'wm_id' => $wm_id, 'cutoff' => $cutoff],
+                    'timecreated ASC, id ASC', '*', 0, $max_per_file
                 );
 
                 if (empty($records)) {
@@ -80,7 +85,9 @@ class archive_task extends \core\task\scheduled_task {
 
                 $this->write_chunk($table, $records);
 
-                $min_id = (int) end($records)->id;
+                $last    = end($records);
+                $wm_time = (int) $last->timecreated;
+                $wm_id   = (int) $last->id;
             }
 
             if ($processed_days >= self::MAX_DAYS_PER_RUN) {
@@ -104,7 +111,14 @@ class archive_task extends \core\task\scheduled_task {
         $last   = end($records);
         $format = config::get_backup_format();
 
-        $filename = sprintf('%d_%d.%s', (int) $first->timecreated, (int) $last->timecreated, $format);
+        // firstid/lastid store the true MIN/MAX id of the chunk — with (timecreated, id)
+        // ordering the first and last records are not necessarily the lowest and highest IDs.
+        $chunk_ids = array_column($records, 'id');
+
+        // Include firstid in the filename to prevent collisions when multiple chunks
+        // share the same starttime (e.g. 200 records at the same timecreated second).
+        $filename = sprintf('%d_%d_%d.%s',
+            (int) $first->timecreated, (int) $last->timecreated, (int) min($chunk_ids), $format);
         $backupdir = config::get_backup_dir();
         $filepath = $backupdir . '/' . $filename;
         $temppath = $backupdir . '/.' . $filename . '.tmp';
@@ -138,8 +152,8 @@ class archive_task extends \core\task\scheduled_task {
         }
 
         $backup_record = new backup(0, (object) [
-            'firstid'    => (int) $first->id,
-            'lastid'     => (int) $last->id,
+            'firstid'    => (int) min($chunk_ids),
+            'lastid'     => (int) max($chunk_ids),
             'starttime'  => (int) $first->timecreated,
             'endtime'    => (int) $last->timecreated,
             'fileformat' => $format,
@@ -153,6 +167,10 @@ class archive_task extends \core\task\scheduled_task {
             [$in_sql, $in_params] = $DB->get_in_or_equal($chunk, SQL_PARAMS_NAMED, 'logid');
             $DB->delete_records_select($table, "id $in_sql", $in_params);
         }
+
+        // Persist watermark after successful write+delete so progress survives a crash
+        // on the next chunk. Uses the last record in (timecreated, id) order.
+        config::set_archive_watermark((int) $last->timecreated, (int) $last->id);
 
         mtrace(sprintf('tool_stdlogarchiver: archived %d records → %s (Backup #%d)',
             count($records), $filename, $backup_record->get('id')));
