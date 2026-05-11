@@ -117,6 +117,42 @@ class backup_test extends advanced_testcase {
     }
 
     /** @group xcurrent */
+    public function test_archive_task_groups_records_by_server_timezone_day(): void {
+        global $CFG, $DB;
+
+        self::set_default_configs();
+        $CFG->timezone = 'America/Sao_Paulo';
+        \core_date::set_default_server_timezone();
+
+        $user = $this->getDataGenerator()->create_user();
+        $log_table = standard_logstore::instance()->get_logstore_table();
+
+        $DB->execute('DELETE FROM {' . $log_table . '}');
+
+        $timezone = new \DateTimeZone('America/Sao_Paulo');
+        $first_time = (new \DateTimeImmutable('2024-01-01 20:30:00', $timezone))->getTimestamp();
+        $second_time = (new \DateTimeImmutable('2024-01-01 21:30:00', $timezone))->getTimestamp();
+
+        self::insert_log_records($user, 1, $first_time);
+        self::insert_log_records($user, 1, $second_time);
+
+        $this->expect_task_trace_output();
+        $task = new \tool_stdlogarchiver\task\archive_task();
+        $task->execute();
+
+        $backups = backup::get_records([]);
+        $this->assertCount(
+            1,
+            $backups,
+            'Records from the same server-timezone day must be archived in the same backup'
+        );
+
+        $backup = reset($backups);
+        $this->assertEquals($first_time, (int) $backup->get('starttime'));
+        $this->assertEquals($second_time, (int) $backup->get('endtime'));
+    }
+
+    /** @group xcurrent */
     public function test_backup_restore(): void {
         global $DB;
 
