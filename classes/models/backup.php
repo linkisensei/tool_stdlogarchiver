@@ -72,11 +72,19 @@ class backup extends persistent {
         return (bool) $this->get('restored');
     }
 
+    public function is_restore_enqueued(): bool {
+        return restore_backup_task::is_enqueued($this->get('id'));
+    }
+
+    public function is_unrestore_enqueued(): bool {
+        return unrestore_backup_task::is_enqueued($this->get('id'));
+    }
+
     public function is_restoring(): bool {
         if ($this->was_restored()) {
             return false;
         }
-        return restore_backup_task::is_enqueued($this->get('id'));
+        return $this->is_restore_enqueued();
     }
 
     public function is_searchable(): bool {
@@ -279,6 +287,11 @@ class backup extends persistent {
         ]);
     }
 
+
+    public static function record_exists_for_path(string $filename): bool {
+        global $DB;
+        return $DB->record_exists(static::TABLE, ['local_path' => $filename]);
+    }
 
     public static function get_last_backup(): ?static {
         $records = self::get_records([], 'id', 'DESC', 0, 1);

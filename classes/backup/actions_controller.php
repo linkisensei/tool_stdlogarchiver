@@ -45,7 +45,7 @@ class actions_controller {
             if ($backup->is_deleted()) {
                 throw new moodle_exception('exception:backup_deleted', 'tool_stdlogarchiver');
             }
-            if ($backup->is_restoring()) {
+            if ($backup->is_restore_enqueued()) {
                 throw new moodle_exception('exception:already_restoring', 'tool_stdlogarchiver');
             }
             if ($backup->was_restored()) {
@@ -72,11 +72,14 @@ class actions_controller {
         try {
             $backup = new backup($backupid);
 
-            if ($backup->is_restoring()) {
+            if ($backup->is_restore_enqueued()) {
                 throw new moodle_exception('exception:already_restoring', 'tool_stdlogarchiver');
             }
             if (!$backup->was_restored()) {
                 throw new moodle_exception('exception:not_yet_restored', 'tool_stdlogarchiver');
+            }
+            if ($backup->is_unrestore_enqueued()) {
+                throw new moodle_exception('exception:already_restoring', 'tool_stdlogarchiver');
             }
 
             \tool_stdlogarchiver\task\unrestore_backup_task::create_and_enqueue($backupid);

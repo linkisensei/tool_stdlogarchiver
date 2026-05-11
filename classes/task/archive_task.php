@@ -130,15 +130,27 @@ class archive_task extends \core\task\scheduled_task {
 
         // Include firstid in the filename to prevent collisions when multiple chunks
         // share the same starttime (e.g. 200 records at the same timecreated second).
-        $filename = sprintf('%d_%d_%d.%s',
+        $basename = sprintf('%d_%d_%d.%s',
             (int) $first->timecreated, (int) $last->timecreated, (int) min($chunk_ids), $format);
         $backupdir = config::get_backup_dir();
+
+        // Resolves final filename, handling crash-recovery collisions. 
+        // Scenario A (file exists, in DB record): orphaned file — safe to overwrite, reuse name. 
+        // Scenario B (file exists, DB record exists): prior crash left a complete backup; use suffix 
+        // to avoid clobbering it, resulting in a redundant but harmless duplicate record.
+        $filename = $basename;
+        if (file_exists($backupdir . '/' . $filename)) {
+            if (backup::record_exists_for_path($filename)) {
+                $suffix = 1;
+                do {
+                    $filename = preg_replace('/(\.[^.]+)$/', "_{$suffix}$1", $basename);
+                    $suffix++;
+                } while (file_exists($backupdir . '/' . $filename) || backup::record_exists_for_path($filename));
+            }
+        }
+
         $filepath = $backupdir . '/' . $filename;
         $temppath = $backupdir . '/.' . $filename . '.tmp';
-
-        if (file_exists($filepath)) {
-            throw new \RuntimeException("Refusing to overwrite existing backup file: {$filename}");
-        }
 
         if (file_exists($temppath)) {
             @unlink($temppath);

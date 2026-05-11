@@ -27,8 +27,7 @@ class backup_restorer{
 
         /** @var Generator<object> */
         foreach ($reader->get_contents_generator() as $record) {
-            $record = $this->format_record($record);
-            $this->import_record($record);
+            $this->import_record($this->format_record($record));
         }
     }
 
@@ -44,7 +43,11 @@ class backup_restorer{
      */
     protected function import_record(object $record){
         global $DB;
-        $DB->import_record($this->table, $this->format_record($record));
+        try {
+            $DB->import_record($this->table, $record);
+        } catch (\dml_write_exception $e) {
+            // Record already exists from a partial previous restore — skip.
+        }
     }
 
     /**

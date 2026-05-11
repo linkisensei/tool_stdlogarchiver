@@ -11,7 +11,7 @@ class unrestore_backup_task extends adhoc_task {
             raise_memory_limit(MEMORY_EXTRA);
 
             $data = (array) $this->get_custom_data();
-            mtrace('Restoring backup #' . $data['backupid']);
+            mtrace('Unrestoring backup #' . $data['backupid']);
 
             $backup = new backup($data['backupid']);
             $backup->undo_restore();
