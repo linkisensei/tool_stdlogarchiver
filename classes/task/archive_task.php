@@ -60,11 +60,10 @@ class archive_task extends \core\task\scheduled_task {
                 break;
             }
 
-            $day_start = (int) floor($min_tc / DAYSECS) * DAYSECS;
-            $day_end   = $day_start + DAYSECS;
+            [$day_start, $day_end] = self::get_server_day_bounds((int) $min_tc);
             $processed_days++;
 
-            mtrace('tool_stdlogarchiver: archiving day ' . gmdate('Y-m-d', $day_start));
+            mtrace('tool_stdlogarchiver: archiving day ' . self::format_server_day($day_start));
 
             // Inner loop: chunks through the day until it is fully archived.
             // Always runs to completion regardless of elapsed time.
@@ -98,6 +97,20 @@ class archive_task extends \core\task\scheduled_task {
                 return;
             }
         }
+    }
+
+    private static function get_server_day_bounds(int $timestamp): array {
+        $timezone = \core_date::get_server_timezone_object();
+        $day_start = (new \DateTimeImmutable('@' . $timestamp))
+            ->setTimezone($timezone)
+            ->setTime(0, 0);
+        $day_end = $day_start->modify('+1 day');
+
+        return [$day_start->getTimestamp(), $day_end->getTimestamp()];
+    }
+
+    private static function format_server_day(int $timestamp): string {
+        return userdate($timestamp, '%Y-%m-%d', \core_date::get_server_timezone(), false);
     }
 
     private function write_chunk(string $table, array $records): void {
