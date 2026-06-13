@@ -8,7 +8,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2026050301;
+$plugin->version   = 2026061301;
 $plugin->requires  = 2022041900; // Moodle 4.2.0
 $plugin->component = 'tool_stdlogarchiver';
 $plugin->maturity  = MATURITY_BETA;

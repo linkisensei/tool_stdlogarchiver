@@ -117,5 +117,17 @@ function xmldb_tool_stdlogarchiver_upgrade(int $oldversion): bool {
         upgrade_plugin_savepoint(true, 2026050301, 'tool', 'stdlogarchiver');
     }
 
+    if ($oldversion < 2026061301) {
+        $current = \tool_stdlogarchiver\config::get(\tool_stdlogarchiver\config::CONFIG_S3_FOLDER, '');
+        if ($current === 'backups') {
+            \tool_stdlogarchiver\config::set(
+                \tool_stdlogarchiver\config::CONFIG_S3_FOLDER,
+                \tool_stdlogarchiver\config::generate_external_folder_name()
+            );
+        }
+
+        upgrade_plugin_savepoint(true, 2026061301, 'tool', 'stdlogarchiver');
+    }
+
     return true;
 }

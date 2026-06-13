@@ -212,7 +212,7 @@ if ($hassiteconfig) {
             'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_S3_FOLDER,
             new lang_string('settings:s3_folder', 'tool_stdlogarchiver'),
             '',
-            'backups',
+            \tool_stdlogarchiver\config::generate_external_folder_name(),
             PARAM_TEXT
         ));
     }

@@ -151,8 +151,14 @@ class config {
         return (string) self::get(self::CONFIG_S3_BUCKET, '');
     }
 
+    public static function generate_external_folder_name(): string {
+        global $CFG;
+        $url = preg_replace('#^https?://#', '', $CFG->wwwroot);
+        return str_replace('/', '-', trim($url, '/'));
+    }
+
     public static function get_s3_folder(): string {
-        return (string) self::get(self::CONFIG_S3_FOLDER, 'backups');
+        return (string) self::get(self::CONFIG_S3_FOLDER, self::generate_external_folder_name());
     }
 
     public static function get_writer_class(): string {
