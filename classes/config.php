@@ -2,6 +2,7 @@
 
 use \moodle_exception;
 use \tool_stdlogarchiver\backup\external\external_s3_backup_service;
+use \tool_stdlogarchiver\backup\external\external_gcs_backup_service;
 use \tool_stdlogarchiver\backup\external\external_backup_service_interface;
 
 class config {
@@ -22,12 +23,6 @@ class config {
     const CONFIG_DELETE_LOCAL_AFTER_EXTERNAL = 'delete_local_after_external';
     const CONFIG_ARCHIVE_WATERMARK_TIME    = 'archive_watermark_time';
     const CONFIG_ARCHIVE_WATERMARK_ID      = 'archive_watermark_id';
-    const CONFIG_AWS_REGION                = 'aws_region';
-    const CONFIG_AWS_KEY                   = 'aws_key';
-    const CONFIG_AWS_SECRET                = 'aws_secret';
-    const CONFIG_S3_BUCKET                 = 's3_bucket';
-    const CONFIG_S3_FOLDER                 = 's3_folder';
-
     // Feature flags (code-only, no admin setting).
     // Set to true to allow purge tasks to also delete files from external storage.
     // Disabled by default to prevent accidental data loss; infrastructure owns the
@@ -136,29 +131,10 @@ class config {
         return (bool) self::get(self::CONFIG_DELETE_LOCAL_AFTER_EXTERNAL, false);
     }
 
-    public static function get_aws_region(): string {
-        return (string) self::get(self::CONFIG_AWS_REGION, '');
-    }
-
-    public static function get_aws_credentials(): array {
-        return [
-            'key'    => (string) self::get(self::CONFIG_AWS_KEY, ''),
-            'secret' => (string) self::get(self::CONFIG_AWS_SECRET, ''),
-        ];
-    }
-
-    public static function get_s3_bucket(): string {
-        return (string) self::get(self::CONFIG_S3_BUCKET, '');
-    }
-
     public static function generate_external_folder_name(): string {
         global $CFG;
         $url = preg_replace('#^https?://#', '', $CFG->wwwroot);
-        return str_replace('/', '-', trim($url, '/'));
-    }
-
-    public static function get_s3_folder(): string {
-        return (string) self::get(self::CONFIG_S3_FOLDER, self::generate_external_folder_name());
+        return str_replace(['/', ':'], '-', trim($url, '/'));
     }
 
     public static function get_writer_class(): string {
@@ -182,7 +158,8 @@ class config {
         }
 
         return [
-            external_s3_backup_service::get_name() => external_s3_backup_service::class,
+            external_s3_backup_service::get_name()  => external_s3_backup_service::class,
+            external_gcs_backup_service::get_name() => external_gcs_backup_service::class,
         ];
     }
 

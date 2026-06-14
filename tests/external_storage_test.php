@@ -4,6 +4,7 @@ defined('MOODLE_INTERNAL') || die();
 
 use advanced_testcase;
 use tool_stdlogarchiver\backup\external\external_backup_service_interface;
+use tool_stdlogarchiver\backup\external\external_gcs_backup_service;
 use tool_stdlogarchiver\backup\external\external_s3_backup_service;
 use tool_stdlogarchiver\models\backup;
 
@@ -64,6 +65,74 @@ class fake_external_backup_service implements external_backup_service_interface 
 
     public function delete(string $external_uri): void {
         self::$delete_calls++;
+    }
+
+    public static function define_settings(): array {
+        return [];
+    }
+}
+
+class fake_gcs_object {
+    public bool $throw_on_exists = false;
+    public bool $exists_result   = true;
+
+    public function exists(): bool {
+        if ($this->throw_on_exists) {
+            throw new \RuntimeException('Simulated GCS error');
+        }
+        return $this->exists_result;
+    }
+
+    public function downloadToFile(string $path): void {}
+    public function delete(): void {}
+}
+
+class fake_gcs_bucket {
+    public int    $upload_calls     = 0;
+    public string $last_upload_name = '';
+    public fake_gcs_object $object_stub;
+
+    public function __construct() {
+        $this->object_stub = new fake_gcs_object();
+    }
+
+    public function object(string $key): fake_gcs_object {
+        return $this->object_stub;
+    }
+
+    public function upload($data, array $opts = []): void {
+        $this->upload_calls++;
+        $this->last_upload_name = $opts['name'] ?? '';
+    }
+}
+
+class fake_gcs_client {
+    public fake_gcs_bucket $bucket_stub;
+
+    public function __construct() {
+        $this->bucket_stub = new fake_gcs_bucket();
+    }
+
+    public function bucket(string $name): fake_gcs_bucket {
+        return $this->bucket_stub;
+    }
+}
+
+class testable_external_gcs_backup_service extends external_gcs_backup_service {
+    public fake_gcs_client $mock_client;
+
+    public function __construct() {
+        $this->mock_client = new fake_gcs_client();
+    }
+
+    protected function load_sdk(): void {}
+
+    protected function get_client(): object {
+        return $this->mock_client;
+    }
+
+    protected function get_autoload_path(): string {
+        return '';
     }
 }
 
@@ -266,5 +335,88 @@ class external_storage_test extends advanced_testcase {
         $this->assertSame(1, fake_external_backup_service::$upload_calls);
         $this->assertSame(fake_external_backup_service::get_name(), $backup->get('external_service'));
         $this->assertSame('s3://test-bucket/test-object.db.gz', $backup->get('external_uri'));
+    }
+
+    /** @group xcurrent */
+    public function test_gcs_is_enabled_false_when_no_credentials(): void {
+        config::set(config::CONFIG_EXTERNAL_BACKUP_SERVICE, external_gcs_backup_service::get_name());
+        config::set(external_gcs_backup_service::CONFIG_GCS_CREDENTIALS, '');
+        config::set(external_gcs_backup_service::CONFIG_GCS_BUCKET, 'test-bucket');
+
+        $this->assertFalse(external_gcs_backup_service::is_enabled());
+    }
+
+    /** @group xcurrent */
+    public function test_gcs_is_enabled_false_when_no_bucket(): void {
+        config::set(config::CONFIG_EXTERNAL_BACKUP_SERVICE, external_gcs_backup_service::get_name());
+        config::set(external_gcs_backup_service::CONFIG_GCS_CREDENTIALS, '{"type":"service_account"}');
+        config::set(external_gcs_backup_service::CONFIG_GCS_BUCKET, '');
+
+        $this->assertFalse(external_gcs_backup_service::is_enabled());
+    }
+
+    /** @group xcurrent */
+    public function test_gcs_is_enabled_true_with_valid_config(): void {
+        config::set(config::CONFIG_EXTERNAL_BACKUP_SERVICE, external_gcs_backup_service::get_name());
+        config::set(external_gcs_backup_service::CONFIG_GCS_CREDENTIALS, '{"type":"service_account"}');
+        config::set(external_gcs_backup_service::CONFIG_GCS_BUCKET, 'test-bucket');
+
+        $this->assertTrue(external_gcs_backup_service::is_enabled());
+    }
+
+    /** @group xcurrent */
+    public function test_gcs_exists_returns_false_on_error(): void {
+        $service = new testable_external_gcs_backup_service();
+        $service->mock_client->bucket_stub->object_stub->throw_on_exists = true;
+
+        $this->assertFalse($service->exists('gs://test-bucket/folder/test.db.gz'));
+    }
+
+    /** @group xcurrent */
+    public function test_gcs_upload_returns_gs_uri(): void {
+        $filename = 'gcs_upload_test.db';
+        $path = config::get_backup_dir() . '/' . $filename;
+        file_put_contents($path, 'sqlite-bytes');
+
+        $backup = new backup(0, (object) [
+            'firstid'             => 21,
+            'lastid'              => 30,
+            'starttime'           => 1700014000,
+            'endtime'             => 1700017600,
+            'fileformat'          => 'db',
+            'local_path'          => $filename,
+            'external_service'    => null,
+            'external_uri'        => null,
+            'external_customdata' => null,
+            'restored'            => 0,
+            'deleted_at'          => 0,
+            'timecreated'         => time(),
+        ]);
+        $backup->save();
+
+        config::set(external_gcs_backup_service::CONFIG_GCS_BUCKET, 'test-bucket');
+        config::set(external_gcs_backup_service::CONFIG_GCS_FOLDER, 'backups');
+
+        $service = new testable_external_gcs_backup_service();
+        $uri = $service->upload($backup);
+
+        $this->assertStringStartsWith('gs://test-bucket/backups/', $uri);
+        $this->assertStringEndsWith('.db.gz', $uri);
+        $this->assertSame(1, $service->mock_client->bucket_stub->upload_calls);
+    }
+
+    /** @group xcurrent */
+    public function test_gcs_define_settings_returns_array(): void {
+        global $CFG;
+        require_once($CFG->dirroot . '/lib/adminlib.php');
+
+        $settings = external_gcs_backup_service::define_settings();
+
+        $this->assertIsArray($settings);
+        $this->assertCount(4, $settings);
+        $this->assertInstanceOf(\admin_setting_heading::class, $settings[0]);
+        $this->assertInstanceOf(\admin_setting_configtextarea::class, $settings[1]);
+        $this->assertInstanceOf(\admin_setting_configtext::class, $settings[2]);
+        $this->assertInstanceOf(\admin_setting_configtext::class, $settings[3]);
     }
 }

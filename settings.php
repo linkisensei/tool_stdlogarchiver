@@ -38,7 +38,7 @@ if ($hassiteconfig) {
 
     if ($ADMIN->fulltree) {
 
-        // ── General ─────────────────────────────────────────────────────────
+        // General
 
         $settingspage->add(new admin_setting_heading(
             'tool_stdlogarchiver/general_header',
@@ -85,7 +85,7 @@ if ($hassiteconfig) {
             WEEKSECS
         ));
 
-        // ── Storage paths ────────────────────────────────────────────────────
+        // Storage paths
 
         $settingspage->add(new admin_setting_heading(
             'tool_stdlogarchiver/storage_header',
@@ -117,7 +117,7 @@ if ($hassiteconfig) {
             3600
         ));
 
-        // ── Retention & purge ────────────────────────────────────────────────
+        // Retention & purge
 
         $settingspage->add(new admin_setting_heading(
             'tool_stdlogarchiver/retention_header',
@@ -133,7 +133,7 @@ if ($hassiteconfig) {
             WEEKSECS
         ));
 
-        // ── External storage ─────────────────────────────────────────────────
+        // External storage
 
         $settingspage->add(new admin_setting_heading(
             'tool_stdlogarchiver/external_header',
@@ -150,7 +150,7 @@ if ($hassiteconfig) {
             'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_EXTERNAL_BACKUP_SERVICE,
             new lang_string('settings:external_backup_service', 'tool_stdlogarchiver'),
             new lang_string('settings:external_backup_service_desc', 'tool_stdlogarchiver'),
-            '',
+            's3',
             $options
         ));
 
@@ -169,52 +169,18 @@ if ($hassiteconfig) {
             1
         ));
 
-        // ── AWS / S3 ─────────────────────────────────────────────────────────
+        //  Backup services settings
 
-        $settingspage->add(new admin_setting_heading(
-            'tool_stdlogarchiver/aws_header',
-            new lang_string('settings:aws_s3_header', 'tool_stdlogarchiver'),
-            ''
-        ));
-
-        $settingspage->add(new admin_setting_configtext(
-            'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_AWS_REGION,
-            new lang_string('settings:aws_region', 'tool_stdlogarchiver'),
-            '',
-            '',
-            PARAM_TEXT
-        ));
-
-        $settingspage->add(new admin_setting_configtext(
-            'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_AWS_KEY,
-            new lang_string('settings:aws_key', 'tool_stdlogarchiver'),
-            '',
-            '',
-            PARAM_TEXT
-        ));
-
-        $settingspage->add(new admin_setting_configpasswordunmask(
-            'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_AWS_SECRET,
-            new lang_string('settings:aws_secret', 'tool_stdlogarchiver'),
-            '',
-            ''
-        ));
-
-        $settingspage->add(new admin_setting_configtext(
-            'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_S3_BUCKET,
-            new lang_string('settings:s3_bucket', 'tool_stdlogarchiver'),
-            '',
-            '',
-            PARAM_TEXT
-        ));
-
-        $settingspage->add(new admin_setting_configtext(
-            'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_S3_FOLDER,
-            new lang_string('settings:s3_folder', 'tool_stdlogarchiver'),
-            '',
-            \tool_stdlogarchiver\config::generate_external_folder_name(),
-            PARAM_TEXT
-        ));
+        $selector = 'tool_stdlogarchiver/' . \tool_stdlogarchiver\config::CONFIG_EXTERNAL_BACKUP_SERVICE;
+        foreach (\tool_stdlogarchiver\config::get_external_backup_services() as $service_name => $class) {
+            foreach ($class::define_settings() as $setting) {
+                $settingspage->add($setting);
+                if (!($setting instanceof admin_setting_heading)) {
+                    $fullname = ($setting->plugin ? $setting->plugin . '/' : '') . $setting->name;
+                    $settingspage->hide_if($fullname, $selector, 'neq', $service_name);
+                }
+            }
+        }
     }
 
     $ADMIN->add('stdlogarchiver', $settingspage);

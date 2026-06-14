@@ -118,10 +118,11 @@ function xmldb_tool_stdlogarchiver_upgrade(int $oldversion): bool {
     }
 
     if ($oldversion < 2026061301) {
-        $current = \tool_stdlogarchiver\config::get(\tool_stdlogarchiver\config::CONFIG_S3_FOLDER, '');
+        $s3_folder_key = \tool_stdlogarchiver\backup\external\external_s3_backup_service::CONFIG_S3_FOLDER;
+        $current = \tool_stdlogarchiver\config::get($s3_folder_key, '');
         if ($current === 'backups') {
             \tool_stdlogarchiver\config::set(
-                \tool_stdlogarchiver\config::CONFIG_S3_FOLDER,
+                $s3_folder_key,
                 \tool_stdlogarchiver\config::generate_external_folder_name()
             );
         }

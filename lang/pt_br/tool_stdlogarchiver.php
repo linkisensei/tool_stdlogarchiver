@@ -62,8 +62,18 @@ $string['settings:s3_bucket_desc']  = '';
 $string['settings:s3_folder']       = 'Pasta no S3';
 $string['settings:s3_folder_desc']  = 'Prefixo de chave (caminho de pasta) dentro do bucket.';
 
+// ── Settings: GCS ────────────────────────────────────────────────────────────
+$string['settings:gcs_header']            = 'Configurações do Google Cloud Storage';
+$string['settings:gcs_credentials']       = 'JSON da conta de serviço';
+$string['settings:gcs_credentials_desc']  = 'Cole o conteúdo completo do arquivo de chave da conta de serviço do Google Cloud (formato JSON).';
+$string['settings:gcs_bucket']            = 'Bucket GCS';
+$string['settings:gcs_bucket_desc']       = '';
+$string['settings:gcs_folder']            = 'Pasta no GCS';
+$string['settings:gcs_folder_desc']       = 'Prefixo de chave (caminho de pasta) dentro do bucket.';
+
 // ── External services ─────────────────────────────────────────────────────────
-$string['external_service:s3'] = 'Amazon S3';
+$string['external_service:s3']  = 'Amazon S3';
+$string['external_service:gcs'] = 'Google Cloud Storage';
 
 // ── Page titles ───────────────────────────────────────────────────────────────
 $string['listbackups:title']   = 'Backups do Logstore';

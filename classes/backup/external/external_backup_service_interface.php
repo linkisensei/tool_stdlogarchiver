@@ -40,4 +40,12 @@ interface external_backup_service_interface {
      * @param string $external_uri URI of the file to delete
      */
     public function delete(string $external_uri): void;
+
+    /**
+     * Returns the admin_setting objects that configure this service.
+     * settings.php adds them to the page and applies hide_if conditions.
+     *
+     * @return \admin_setting[]
+     */
+    public static function define_settings(): array;
 }
